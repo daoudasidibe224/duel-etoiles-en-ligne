@@ -3,8 +3,8 @@ body
   include includes/header.pug
   main#contenu.page-shell
     header.page-heading
-      p.eyebrow Le point de rendez-vous
-      h1.title Les salons
+      p.eyebrow DUEL / LOBBY
+      h1.title Choisir une partie
       p.muted Bienvenue #{utilisateur.nomUtilisateur}. Ouvrez une partie ou rejoignez un joueur.
     include includes/messages.pug
     .lobby-layout
@@ -15,8 +15,8 @@ body
         .partieDisponible(aria-live='polite')
           p Recherche des salons…
       aside.panel.lobby-aside
-        p.eyebrow À vous de lancer
-        h2 Le prochain record ?
+        p.eyebrow NOUVELLE PARTIE
+        h2 Prenez les commandes
         p Une partie dure 90 secondes. Un second joueur vous rejoint, puis vous donnez le départ.
         form.lancerJeuForm(action='/salon/salonDeJeu/room' method='post')
           input(type='hidden' name='_csrf' value=csrfToken)

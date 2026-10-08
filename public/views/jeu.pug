@@ -4,6 +4,7 @@ body
   include includes/header.pug
   main#contenu.game-page
     .game-toolbar
+      button#leave-game.button.is-outlined(type='button') Quitter la partie
       button#share-room.button.is-outlined(type='button') Copier l’invitation
       button#sound-toggle.button.is-outlined(type='button' aria-pressed='false') Activer le son
     #chargement
@@ -37,6 +38,7 @@ body
         button#move-left.button(type='button' aria-label='Se déplacer à gauche') ←
         button#move-right.button(type='button' aria-label='Se déplacer à droite') →
       p#game-status(role='status')
+      button#retry-score.button.is-outlined.cacher(type='button') Réessayer l’enregistrement
       #finPartie.menu
         h1 Partie terminée
         p#resultat

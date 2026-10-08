@@ -13,9 +13,14 @@ const status = element("chat-status"),
   button = form.querySelector("button"),
   chat = document.querySelector(".chatBox");
 if (!button || !chat) throw new Error("Discussion introuvable");
+let pending: { id: string; text: string } | undefined;
+const seen = new Set<string>();
+let sending = false;
 client.on("connect", () => {
   status.textContent = "Vous êtes en ligne.";
-  client.emit("join", {}, () => {});
+  client.emit("join", {}, (error) => {
+    if (error) status.textContent = error;
+  });
 });
 client.on("disconnect", () => {
   status.textContent =
@@ -38,6 +43,12 @@ client.on("roomData", (payload) => {
 client.on("message", (payload) => {
   const parsed = messageSchema.safeParse(payload);
   if (!parsed.success) return;
+  if (seen.has(parsed.data.id)) return;
+  seen.add(parsed.data.id);
+  if (seen.size > 200) {
+    const first = seen.values().next().value;
+    if (first) seen.delete(first);
+  }
   const message = parsed.data,
     row = document.createElement("article"),
     info = document.createElement("p"),
@@ -53,20 +64,25 @@ client.on("message", (payload) => {
 });
 form.addEventListener("submit", (event) => {
   event.preventDefault();
-  if (!client.connected || !input.value.trim()) return;
+  if (sending || !client.connected || !input.value.trim()) return;
+  sending = true;
+  if (!pending || pending.text !== input.value.trim())
+    pending = { id: crypto.randomUUID(), text: input.value.trim() };
   button.disabled = true;
   client
     .timeout(5000)
     .emit(
       "envoyerMessage",
-      input.value,
+      pending,
       (timeout: Error | null, error?: string) => {
+        sending = false;
         button.disabled = false;
         if (timeout || error) {
           status.textContent =
             error || "Le message n’a pas été envoyé. Réessayez.";
           return;
         }
+        pending = undefined;
         input.value = "";
         status.textContent = "Message envoyé.";
         input.focus();

@@ -3,6 +3,8 @@ import {
   gameRoomSchema,
   movementSchema,
   scoreSchema,
+  roundSchema,
+  type Round,
   type ServerEvents,
   type ClientEvents,
   type PlayerState,
@@ -19,15 +21,35 @@ const status = element("game-status"),
   start = element("btnDepart"),
   menu = element("menuDepart"),
   end = element("finPartie");
-const mario = new Image(),
-  luigi = new Image();
-mario.src = "/sprites/mario.png";
-luigi.src = "/sprites/luigi.png";
-const music = new Audio("/sons/Heat.ogg"),
-  hit = new Audio("/sons/Sound-006.wav");
-music.loop = true;
-music.muted = true;
-hit.muted = true;
+let audio: AudioContext | undefined;
+let soundEnabled = false;
+let soundTimer: ReturnType<typeof setInterval> | undefined;
+function tone(frequency: number, length = 0.08) {
+  if (!soundEnabled || !audio || audio.state !== "running") return;
+  const oscillator = audio.createOscillator(),
+    volume = audio.createGain();
+  oscillator.type = "square";
+  oscillator.frequency.value = frequency;
+  volume.gain.setValueAtTime(0.025, audio.currentTime);
+  volume.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + length);
+  oscillator.connect(volume).connect(audio.destination);
+  oscillator.start();
+  oscillator.stop(audio.currentTime + length);
+  oscillator.onended = () => {
+    oscillator.disconnect();
+    volume.disconnect();
+  };
+}
+function playMusic() {
+  clearInterval(soundTimer);
+  if (!soundEnabled || !running) return;
+  const notes = [220, 330, 440, 330, 262, 392, 523, 392];
+  let note = 0;
+  soundTimer = setInterval(() => {
+    tone(notes[note % notes.length] ?? 220, 0.12);
+    note++;
+  }, 600);
+}
 class Runner {
   score = 0;
   x: number;
@@ -43,7 +65,7 @@ class Runner {
   constructor(
     readonly id: string,
     readonly name: string,
-    readonly sprite: HTMLImageElement,
+    readonly color: string,
     x: number,
   ) {
     this.x = x;
@@ -52,25 +74,26 @@ class Runner {
     if (this.state.runningRight) this.x = Math.min(915, this.x + 5);
     else if (this.state.runningLeft) this.x = Math.max(0, this.x - 5);
     this.frame = (this.frame + 1) % 96;
-    const offset = this.state.runningRight
-      ? 180
-      : this.state.runningLeft
-        ? 270
-        : this.state.idLeft
-          ? 90
-          : 0;
-    if (this.sprite.complete && this.sprite.naturalWidth)
-      context.drawImage(
-        this.sprite,
-        offset,
-        Math.floor(this.frame / 6) * 113.9,
-        90,
-        113.9,
-        this.x,
-        this.y,
-        45,
-        57,
-      );
+    const moving = this.state.runningLeft || this.state.runningRight;
+    const step = moving ? (Math.floor(this.frame / 12) % 2) * 3 : 0;
+    context.save();
+    context.translate(this.x, this.y);
+    context.fillStyle = this.color;
+    context.fillRect(6, 0, 33, 22);
+    context.fillRect(4, 24, 37, 21);
+    context.fillRect(0, 27, 5, 17);
+    context.fillRect(40, 27, 5, 17);
+    context.fillRect(8, 44, 11, 13 - step);
+    context.fillRect(26, 44, 11, 10 + step);
+    context.fillStyle = "#080b08";
+    context.fillRect(10, 5, 25, 11);
+    context.fillRect(12, 30, 21, 6);
+    context.fillStyle = "#f5ffe8";
+    const look = this.state.idLeft ? -2 : 2;
+    context.fillRect(14 + look, 8, 4, 4);
+    context.fillRect(25 + look, 8, 4, 4);
+    context.fillRect(19, 24, 7, 3);
+    context.restore();
   }
 }
 interface Star {
@@ -85,7 +108,12 @@ let self: Runner | undefined,
   remaining = 90,
   frame = 0,
   timer: ReturnType<typeof setInterval> | undefined,
-  users = 0;
+  users = 0,
+  playerId = "",
+  currentRound: Round | undefined,
+  sequence = 0,
+  animation: number | undefined,
+  replaced = false;
 function updateHud() {
   const opponent = others.values().next().value;
   element("self-name").textContent = self?.name || "Vous";
@@ -98,7 +126,8 @@ function updateHud() {
 function stop() {
   running = false;
   clearInterval(timer);
-  music.pause();
+  if (animation !== undefined) cancelAnimationFrame(animation);
+  clearInterval(soundTimer);
   if (self) {
     self.state.runningLeft = false;
     self.state.runningRight = false;
@@ -121,19 +150,10 @@ function finish() {
         : `${opponent.name} a gagné.`;
   element("monScore").textContent = `Votre score : ${self.score}`;
   element("autreScore").textContent = `${opponent.name} : ${opponent.score}`;
-  status.textContent = "Enregistrement du score…";
-  client
-    .timeout(5000)
-    .emit(
-      "scoreFinDeJeu",
-      { monScore: self.score, scoreAutreJoueur: opponent.score },
-      (timeout: Error | null, error?: string) => {
-        status.textContent = timeout
-          ? "Connexion interrompue. Le score n’a pas été confirmé."
-          : error ||
-            "Score enregistré. Retrouvez cette partie dans vos scores.";
-      },
-    );
+  status.textContent = currentRound?.saved
+    ? "Score enregistré. Retrouvez cette partie dans vos scores."
+    : currentRound?.saveError || "Enregistrement du score…";
+  element("retry-score").classList.toggle("cacher", !currentRound?.saveError);
 }
 function draw() {
   if (!running || !ctx) return;
@@ -141,7 +161,41 @@ function draw() {
     finish();
     return;
   }
-  ctx.clearRect(0, 0, 960, 540);
+  ctx.fillStyle = "#080e0a";
+  ctx.fillRect(0, 0, 960, 540);
+  ctx.fillStyle = "#263421";
+  for (let x = 0; x < 960; x += 48)
+    for (let y = 0; y < 490; y += 48) ctx.fillRect(x, y, 1, 1);
+  ctx.strokeStyle = "#294125";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, 350);
+  for (let i = 0; i < 13; i++) {
+    const x = i * 80,
+      top = 315 - (i % 3) * 50;
+    ctx.lineTo(x, top);
+    ctx.lineTo(x + 50, top);
+    ctx.lineTo(x + 50, 395);
+  }
+  ctx.lineTo(960, 395);
+  ctx.stroke();
+  ctx.fillStyle = "#788559";
+  for (const [x, y] of [
+    [80, 65],
+    [245, 145],
+    [390, 60],
+    [670, 120],
+    [830, 55],
+    [540, 205],
+  ] as const) {
+    ctx.fillRect(x, y, 5, 1);
+    ctx.fillRect(x + 2, y - 2, 1, 5);
+  }
+  ctx.strokeStyle = "#bcf36e";
+  ctx.beginPath();
+  ctx.moveTo(0, 490);
+  ctx.lineTo(960, 490);
+  ctx.stroke();
   ctx.fillStyle = "rgba(0,0,0,.7)";
   ctx.fillRect(0, 490, 960, 50);
   self?.update(ctx);
@@ -173,9 +227,12 @@ function draw() {
     ) {
       self.score++;
       updateHud();
-      client.emit("score", { score: self.score });
-      hit.currentTime = 0;
-      void hit.play().catch(() => {});
+      client.emit("score", {
+        score: self.score,
+        roundId: currentRound?.id,
+        sequence: sequence++,
+      });
+      tone(880, 0.08);
       return false;
     }
     return star.life > 0;
@@ -195,8 +252,23 @@ function draw() {
   ctx.textAlign = "right";
   for (const runner of others.values())
     ctx.fillText(`${runner.name} : ${runner.score}`, 948, 521);
-  requestAnimationFrame(draw);
+  animation = requestAnimationFrame(draw);
 }
+client.on("identity", (id) => {
+  playerId = id;
+});
+client.on("replaced", () => {
+  replaced = true;
+  stop();
+  status.textContent =
+    "Cette partie est ouverte dans un autre onglet. Votre place y a été transférée.";
+  start.classList.add("cacher");
+});
+client.on("roomClosed", (reason) => {
+  stop();
+  start.classList.add("cacher");
+  status.textContent = reason;
+});
 client.on("connect", () =>
   client.emit("join", { room }, (error) => {
     if (error) {
@@ -210,8 +282,9 @@ client.on("connect_error", () => {
 });
 client.on("disconnect", () => {
   stop();
-  status.textContent =
-    "Connexion interrompue. Revenez aux salons pour rejouer.";
+  if (!replaced)
+    status.textContent =
+      "Connexion interrompue. Reprise automatique pendant 12 secondes…";
 });
 client.on("roomData", (payload) => {
   const parsed = gameRoomSchema.safeParse(payload);
@@ -219,49 +292,103 @@ client.on("roomData", (payload) => {
   const players = parsed.data.utilisateurs;
   users = players.length;
   const count = document.querySelector(".nbJoueur"),
-    host = players[0];
+    host =
+      players.find((player) => player.userId === parsed.data.ownerId) ??
+      players[0];
   if (count)
     count.textContent =
       users < 2
         ? `${users}/2 joueurs. Invitez un ami pour jouer.`
         : `2/2 joueurs. ${host?.nomUtilisateur} peut lancer la partie.`;
-  start.classList.toggle("cacher", users !== 2 || host?.id !== client.id);
+  start.classList.toggle(
+    "cacher",
+    users !== 2 || host?.userId !== playerId || Boolean(parsed.data.round),
+  );
   for (const [id] of others)
     if (!players.some((player) => player.id === id)) others.delete(id);
   for (const player of players) {
-    if (player.id === client.id) {
-      self ??= new Runner(player.id, player.nomUtilisateur, mario, 430);
+    if (player.userId === playerId) {
+      self ??= new Runner(
+        player.id,
+        player.nomUtilisateur,
+        player.userId === parsed.data.ownerId ? "#ffbf47" : "#bcf36e",
+        430,
+      );
+      self.score = player.score;
     } else if (!others.has(player.id))
       others.set(
         player.id,
-        new Runner(player.id, player.nomUtilisateur, luigi, 530),
+        new Runner(
+          player.id,
+          player.nomUtilisateur,
+          player.userId === parsed.data.ownerId ? "#ffbf47" : "#bcf36e",
+          530,
+        ),
       );
   }
+  for (const player of players) {
+    const other = others.get(player.id);
+    if (other) other.score = player.score;
+  }
   updateHud();
-  if (running && users < 2) finish();
 });
-client.on("init", () => {
-  if (running || !self) return;
-  remaining = 90;
+client.on("init", (payload) => {
+  const parsed = roundSchema.safeParse(payload);
+  if (
+    !parsed.success ||
+    parsed.data.ended ||
+    !self ||
+    (running && currentRound?.id === parsed.data.id)
+  )
+    return;
+  stop();
+  currentRound = parsed.data;
+  remaining = Math.max(0, Math.ceil((currentRound.endsAt - Date.now()) / 1000));
   stars = [];
   frame = 0;
-  self.score = 0;
   running = true;
   menu.style.display = "none";
   end.style.display = "none";
   status.textContent = "La partie a commencé.";
-  void music.play().catch(() => {});
+  playMusic();
   draw();
   timer = setInterval(() => {
-    remaining--;
+    remaining = Math.max(
+      0,
+      Math.ceil(((currentRound?.endsAt ?? Date.now()) - Date.now()) / 1000),
+    );
     updateHud();
-    if (remaining <= 0) finish();
-  }, 1000);
+    if (remaining <= 0) stop();
+  }, 250);
+});
+client.on("roundEnded", (payload) => {
+  const parsed = gameRoomSchema.safeParse(payload);
+  if (!parsed.success || !parsed.data.round?.ended) return;
+  currentRound = parsed.data.round;
+  for (const player of parsed.data.utilisateurs) {
+    if (player.userId !== playerId && !others.has(player.id))
+      others.set(
+        player.id,
+        new Runner(
+          player.id,
+          player.nomUtilisateur,
+          player.userId === parsed.data.ownerId ? "#ffbf47" : "#bcf36e",
+          530,
+        ),
+      );
+    const runner = player.userId === playerId ? self : others.get(player.id);
+    if (runner) runner.score = player.score;
+  }
+  remaining = 0;
+  updateHud();
+  finish();
 });
 client.on("score", (payload) => {
   const parsed = scoreSchema.safeParse(payload);
   if (!parsed.success) return;
-  const runner = others.get(parsed.data.id);
+  if (parsed.data.roundId !== currentRound?.id) return;
+  const runner =
+    parsed.data.id === playerId ? self : others.get(parsed.data.id);
   if (runner) runner.score = parsed.data.score;
   updateHud();
 });
@@ -282,7 +409,11 @@ function move(direction: "left" | "right", pressed: boolean) {
     self.state.idRight = true;
     self.state.idLeft = false;
   }
-  client.emit("deplacementMonJoueur", { etat: self.state });
+  client.emit("deplacementMonJoueur", {
+    etat: self.state,
+    roundId: currentRound?.id,
+    sequence: sequence++,
+  });
 }
 for (const type of ["keydown", "keyup"])
   document.addEventListener(type, (event) => {
@@ -321,17 +452,39 @@ window.addEventListener("blur", () => {
   move("right", false);
 });
 start.addEventListener("click", () => client.emit("startGame"));
-element("terminer").addEventListener("click", () => {
-  location.href = "/salon";
+function leaveGame() {
+  client.timeout(3000).emit("leave", () => {
+    location.href = "/salon";
+  });
+}
+element("terminer").addEventListener("click", leaveGame);
+element("leave-game").addEventListener("click", leaveGame);
+element("retry-score").addEventListener("click", () => {
+  status.textContent = "Enregistrement du score…";
+  client
+    .timeout(5000)
+    .emit(
+      "scoreFinDeJeu",
+      { roundId: currentRound?.id },
+      (timeout: Error | null, error?: string) => {
+        status.textContent = timeout
+          ? "Connexion interrompue. Réessayez."
+          : error ||
+            "Score enregistré. Retrouvez cette partie dans vos scores.";
+        element("retry-score").classList.toggle("cacher", !timeout && !error);
+      },
+    );
 });
 element("sound-toggle").addEventListener("click", () => {
   const button = element("sound-toggle"),
     enabled = button.getAttribute("aria-pressed") !== "true";
   button.setAttribute("aria-pressed", String(enabled));
   button.textContent = enabled ? "Couper le son" : "Activer le son";
-  music.muted = !enabled;
-  hit.muted = !enabled;
-  if (enabled && running) void music.play().catch(() => {});
+  soundEnabled = enabled;
+  if (enabled) {
+    audio ??= new AudioContext();
+    void audio.resume().then(playMusic);
+  } else clearInterval(soundTimer);
 });
 element("share-room").addEventListener("click", async () => {
   try {

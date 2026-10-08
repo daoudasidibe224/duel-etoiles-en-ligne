@@ -2,22 +2,12 @@ include includes/head.pug
 body
   include includes/header.pug
   main#contenu.auth-layout
-    section.arcade-intro
-      p.eyebrow L’arcade à deux
-      h1.title Attrapez les étoiles.
-        br
-        span Défiez votre ami.
-      p.intro-text Retrouvez un ami, attrapez les étoiles et faites grimper votre score dans une partie de 90 secondes.
-      .arcade-scene(aria-hidden='true')
-        span.star.star-a ✦
-        span.star.star-b ✦
-        img(src='/images/M&L.jpg' alt='')
-        span.scene-floor
-      p.scene-caption Deux joueurs · Flèches ou commandes tactiles
-    section.auth-card(aria-labelledby='form-title')
-      p.eyebrow Prêt pour une partie ?
-      h2#form-title Connexion
-      p.muted Votre prochain record vous attend.
+    section.auth-card.console-frame(aria-labelledby='form-title')
+      .console-label
+        span ACCÈS JOUEUR
+        span.system-light En attente
+      h1#form-title Connexion
+      p.muted Deux joueurs. 90 secondes. Attrapez les étoiles.
       include includes/messages.pug
       form(action='/utilisateur/connexion' method='post')
         input(type='hidden' name='_csrf' value=csrfToken)

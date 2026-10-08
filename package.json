@@ -2,7 +2,7 @@
   "name": "duel-etoiles",
   "version": "1.1.0",
   "private": true,
-  "description": "Jeu multijoueur et discussion en temps r\u00e9el",
+  "description": "Jeu multijoueur et discussion en temps réel",
   "main": "dist/server.js",
   "engines": {
     "node": ">=22.16.0"
@@ -10,17 +10,15 @@
   "scripts": {
     "start": "node dist/server.js",
     "dev": "node scripts/dev.js",
-    "css-build": "node scripts/build-css.js",
     "test": "tsx --test test/*.test.ts",
     "check": "npm run lint && npm run typecheck && npm run build && npm test",
-    "build": "npm run css-build && tsc -p tsconfig.server.json && node scripts/build-client.js",
+    "build": "tsc -p tsconfig.server.json && node scripts/build-client.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint src client shared server.ts",
     "test:e2e": "node test/e2e.cjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
-    "bulma": "^1.0.4",
     "connect-flash": "^0.1.1",
     "connect-mongo": "^6.0.0",
     "dotenv": "^18.0.6",

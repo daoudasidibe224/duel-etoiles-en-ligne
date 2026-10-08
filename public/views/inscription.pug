@@ -2,18 +2,12 @@ include includes/head.pug
 body
   include includes/header.pug
   main#contenu.auth-layout
-    section.arcade-intro
-      p.eyebrow Votre place dans l’arcade
-      h1.title Un pseudo.
-        br
-        span Des records.
-      p.intro-text Créez votre compte pour ouvrir une partie, discuter avec les autres joueurs et retrouver vos scores.
-      .arcade-scene(aria-hidden='true')
-        span.star.star-a ✦
-        img(src='/images/M&L.jpg' alt='')
-        span.scene-floor
-    section.auth-card(aria-labelledby='form-title')
-      h2#form-title Créer un compte
+    section.auth-card.console-frame(aria-labelledby='form-title')
+      .console-label
+        span NOUVEAU JOUEUR
+        span.system-light Inscription
+      h1#form-title Créer un compte
+      p.muted Votre pseudo apparaîtra dans les salons et les scores.
       include includes/messages.pug
       form(action='/utilisateur/inscription' method='post')
         input(type='hidden' name='_csrf' value=csrfToken)

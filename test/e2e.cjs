@@ -17,11 +17,13 @@ const assert = require("node:assert/strict");
   const mongo = await MongoMemoryServer.create();
   await mongoose.connect(mongo.getUri());
   const store = MongoStore.create({ client: mongoose.connection.getClient() });
-  const { server, io } = createApp({ secret: "q".repeat(48), store });
+  const { app, server, io } = createApp({ secret: "q".repeat(48), store });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const base = "http://127.0.0.1:" + server.address().port;
   const browser = await chromium.launch({ headless: true });
   const errors = [];
+  const track = (page) =>
+    page.on("pageerror", (error) => errors.push(error.message));
   const a = await browser.newContext({
       viewport: { width: 1440, height: 1000 },
     }),
@@ -46,6 +48,12 @@ const assert = require("node:assert/strict");
     }
   }
   await two.setViewportSize({ width: 390, height: 844 });
+  await two.emulateMedia({ reducedMotion: "reduce" });
+  await two.goto(base + "/connexion");
+  await two.screenshot({
+    path: path.join(results, "jeu-mobile-auth.png"),
+    fullPage: true,
+  });
   await one.goto(base + "/connexion");
   await one.screenshot({
     path: path.join(results, "jeu-desktop.png"),
@@ -71,14 +79,21 @@ const assert = require("node:assert/strict");
     await two.evaluate(() => document.documentElement.scrollWidth > innerWidth),
     false,
   );
-  await two.getByRole("button", { name: "Ouvrir le menu" }).click();
+  await two.getByRole("button", { name: "Ouvrir le menu" }).focus();
+  await two.keyboard.press("Enter");
   assert.equal(
     await two
       .getByRole("button", { name: "Ouvrir le menu" })
       .getAttribute("aria-expanded"),
     "true",
   );
-  await two.getByRole("button", { name: "Ouvrir le menu" }).click();
+  await two.keyboard.press("Escape");
+  assert.equal(
+    await two
+      .getByRole("button", { name: "Ouvrir le menu" })
+      .getAttribute("aria-expanded"),
+    "false",
+  );
   await one.getByRole("button", { name: "Ouvrir une partie" }).click();
   await one.waitForURL("**/salon/salonDeJeu/*");
   await two.getByRole("link", { name: "Rejoindre" }).click();
@@ -96,10 +111,42 @@ const assert = require("node:assert/strict");
       .getAttribute("aria-pressed"),
     "true",
   );
+  const matchUrl = one.url();
+  for (let repetition = 0; repetition < 3; repetition++) {
+    const twins = await Promise.all([a.newPage(), a.newPage()]);
+    for (const page of twins) track(page);
+    await Promise.all(twins.map((page) => page.goto(matchUrl)));
+    await Promise.all(
+      twins.map((page) =>
+        page
+          .locator("#self-name")
+          .getByText("qa_one", { exact: true })
+          .waitFor(),
+      ),
+    );
+    const players = app.salons[matchUrl.split("/").pop()].utilisateurs;
+    assert.equal(players.length, 2);
+    assert.equal(new Set(players.map((player) => player.userId)).size, 2);
+    await Promise.all(twins.map((page) => page.close()));
+    await one.reload();
+    await one
+      .getByRole("button", { name: "Jouer", exact: true })
+      .waitFor({ state: "visible" });
+  }
   await one.getByRole("button", { name: "Jouer", exact: true }).click();
   await one.getByText("La partie a commencé.", { exact: true }).waitFor();
   await two.getByText("La partie a commencé.", { exact: true }).waitFor();
   assert.equal(await two.locator("#self-name").textContent(), "qa_two");
+  await b.setOffline(true);
+  await two.reload({ timeout: 4000 }).catch(() => {});
+  await b.setOffline(false);
+  await two.goto(matchUrl);
+  await two.getByText("La partie a commencé.", { exact: true }).waitFor();
+  assert.equal(app.salons[matchUrl.split("/").pop()].utilisateurs.length, 2);
+  await one.screenshot({
+    path: path.join(results, "jeu-desktop-game.png"),
+    fullPage: true,
+  });
   await two.locator("#countdown").waitFor({ state: "visible" });
   await two
     .locator("#move-right")
@@ -121,6 +168,7 @@ const assert = require("node:assert/strict");
     })
     .waitFor({ timeout: 110000 });
   await one.getByRole("button", { name: "Terminer", exact: true }).click();
+  await one.waitForURL("**/salon");
   await one.goto(base + "/stats");
   await one.getByText("qa_one / qa_two", { exact: true }).waitFor();
   await two.goto(base + "/salon/discussion&jeu");
@@ -158,6 +206,14 @@ const assert = require("node:assert/strict");
       );
     }
   }
+  await two.goto(base + "/missing");
+  await two
+    .getByRole("heading", { name: "Page introuvable", exact: true })
+    .waitFor();
+  assert.equal(
+    await two.evaluate(() => document.documentElement.scrollWidth > innerWidth),
+    false,
+  );
   assert.deepEqual(errors, []);
   console.log(
     JSON.stringify(
@@ -169,6 +225,8 @@ const assert = require("node:assert/strict");
           "menu",
           "lobby",
           "two players",
+          "same account concurrent tabs x3",
+          "offline refresh and round resume",
           "start",
           "touch",
           "results",

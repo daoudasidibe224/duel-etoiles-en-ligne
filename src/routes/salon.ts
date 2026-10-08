@@ -8,6 +8,13 @@ router.get("/", (req, res) => res.render("salon", { salons: req.app.salons }));
 router.get("/discussion&jeu", (req, res) => res.render("discussionForm"));
 router.post("/salonDeJeu/room", (req, res) => {
   const salons = req.app.salons;
+  const userId = authenticatedUser(req).id;
+  const current = Object.values(salons).find(
+    (room) =>
+      room.proprietaireId === userId ||
+      room.utilisateurs.some((player) => player.userId === userId),
+  );
+  if (current) return res.redirect(`/salon/salonDeJeu/${current.id}`);
   if (Object.keys(salons).length >= 100)
     return res
       .status(429)
@@ -29,7 +36,12 @@ router.get("/salonDeJeu/:room", (req, res) => {
       titre: "Salon fermé",
       message: "Cette partie est terminée ou le salon n’existe plus.",
     });
-  if (salon.utilisateurs.length >= 2)
+  if (
+    (salon.utilisateurs.length >= 2 || salon.started) &&
+    !salon.utilisateurs.some(
+      (player) => player.userId === authenticatedUser(req).id,
+    )
+  )
     return res.status(409).render("erreur", {
       titre: "Salon complet",
       message: "Deux joueurs ont déjà rejoint cette partie.",

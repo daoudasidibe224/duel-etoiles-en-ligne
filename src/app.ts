@@ -25,9 +25,11 @@ import "./types";
 export function createApp({
   secret,
   store,
+  gameOptions,
 }: {
   secret: string;
   store?: session.Store;
+  gameOptions?: { durationMs?: number; reconnectMs?: number };
 }) {
   if (!secret || secret.length < 32)
     throw new Error(
@@ -97,7 +99,7 @@ export function createApp({
     io.of(name).use(authorizeSocket);
   app.io = io;
   app.salons = Object.create(null);
-  registerSockets({ io, salons: app.salons });
+  registerSockets({ io, salons: app.salons, gameOptions });
   const publicDirectory = path.resolve(
     __dirname,
     existsSync(path.join(__dirname, "../public"))
@@ -109,10 +111,8 @@ export function createApp({
   for (const [url, folder] of Object.entries({
     images: "assets/images",
     js: "js",
-    sons: "assets/sons",
-    sprites: "assets/sprites",
-    tilesets: "assets/tilesets",
     styles: "assets/styles",
+    fonts: "assets/fonts",
   })) {
     app.use(`/${url}`, express.static(path.join(publicDirectory, folder)));
   }

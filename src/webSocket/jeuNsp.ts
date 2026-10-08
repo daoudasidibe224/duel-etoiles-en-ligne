@@ -1,5 +1,6 @@
-import Score from "../models/Score";
-import { socketUser, type GameNamespace } from "../types";
+import { randomUUID } from "node:crypto";
+import { saveRound } from "../services/results";
+import { socketUser, type GameNamespace, type GameSocket } from "../types";
 import {
   joinSchema,
   movementInputSchema,
@@ -9,14 +10,98 @@ import {
   type Rooms,
   type PlayerState,
 } from "../../shared/contracts";
+interface Membership {
+  player: Player;
+  socketId: string;
+  movementSequence: number;
+  scoreSequence: number;
+  expiry?: ReturnType<typeof setTimeout>;
+}
 export default function game(
-  jeuNsp: GameNamespace,
-  salonNsp: GameNamespace,
-  salons: Rooms,
+  namespace: GameNamespace,
+  lobby: GameNamespace,
+  rooms: Rooms,
+  options: { durationMs?: number; reconnectMs?: number } = {},
 ) {
-  jeuNsp.on("connection", (socket) => {
-    let utilisateur: Player | undefined;
-    let saved = false;
+  const members = new Map<string, Membership>();
+  const participants = new Map<string, Player[]>();
+  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+  const duration = options.durationMs ?? 90_000;
+  const grace = options.reconnectMs ?? 12_000;
+  const snapshot = (room: Rooms[string]) => ({
+    room: room.id,
+    ownerId: room.proprietaireId,
+    utilisateurs: room.utilisateurs,
+    round: room.round,
+  });
+  const resultSnapshot = (room: Rooms[string]) => ({
+    ...snapshot(room),
+    utilisateurs: room.round
+      ? (participants.get(room.round.id) ?? room.utilisateurs)
+      : room.utilisateurs,
+  });
+  const publish = (room: Rooms[string]) => {
+    namespace.to(room.id).emit("roomData", snapshot(room));
+    lobby.emit("majSalonDeJeu", rooms);
+  };
+  const end = async (room: Rooms[string]) => {
+    const round = room.round;
+    if (!round || round.ended) return;
+    participants.set(
+      round.id,
+      room.utilisateurs.map((player) => ({ ...player })),
+    );
+    round.ended = true;
+    clearTimeout(timers.get(room.id));
+    timers.delete(room.id);
+    namespace.to(room.id).emit("roundEnded", resultSnapshot(room));
+    try {
+      await saveRound(round, participants.get(round.id) ?? room.utilisateurs);
+      round.saved = true;
+    } catch {
+      round.saved = false;
+      round.saveError =
+        "Le score n’a pas pu être enregistré. Réessayez lorsque la connexion revient.";
+    }
+    namespace.to(room.id).emit("roundEnded", resultSnapshot(room));
+  };
+  const remove = (member: Membership) => {
+    clearTimeout(member.expiry);
+    const room = rooms[member.player.room];
+    members.delete(member.player.userId);
+    if (!room) return;
+    // Capture des participants avant toute suppression pour conserver un résultat cohérent.
+    void end(room);
+    if (room.proprietaireId === member.player.userId) {
+      namespace
+        .to(room.id)
+        .emit("roomClosed", "Le propriétaire a quitté le salon.");
+      for (const player of room.utilisateurs) {
+        const other = members.get(player.userId);
+        clearTimeout(other?.expiry);
+        members.delete(player.userId);
+      }
+      namespace.in(room.id).socketsLeave(room.id);
+      if (room.round) participants.delete(room.round.id);
+      delete rooms[room.id];
+    } else {
+      room.utilisateurs = room.utilisateurs.filter(
+        (player) => player.userId !== member.player.userId,
+      );
+      if (!room.utilisateurs.length) {
+        if (room.round) participants.delete(room.round.id);
+        delete rooms[room.id];
+      } else publish(room);
+    }
+    lobby.emit("majSalonDeJeu", rooms);
+  };
+  namespace.on("connection", (socket: GameSocket) => {
+    const user = socketUser(socket);
+    socket.emit("identity", user.id);
+    const active = () => {
+      const member = members.get(user.id);
+      return member?.socketId === socket.id ? member : undefined;
+    };
     socket.on("join", (payload, callback) => {
       const reply = (error?: string) => {
         if (typeof callback === "function") {
@@ -24,57 +109,128 @@ export default function game(
           else callback();
         }
       };
-      if (utilisateur) return reply("Vous avez déjà rejoint une partie.");
       const parsed = joinSchema.safeParse(payload);
       if (!parsed.success) return reply("Salon invalide.");
-      const salon = salons[parsed.data.room],
-        user = socketUser(socket);
+      const room = rooms[parsed.data.room],
+        previous = members.get(user.id);
+      if (previous && previous.player.room !== parsed.data.room)
+        return reply(
+          "Quittez votre salon actuel avant de rejoindre une autre partie.",
+        );
       if (
-        !salon ||
-        salon.started ||
-        salon.utilisateurs.length >= 2 ||
-        salon.utilisateurs.some((player) => player.userId === user.id)
+        !room ||
+        (!previous && (room.started || room.utilisateurs.length >= 2))
       )
-        return reply("Salon fermé, complet ou déjà rejoint.");
-      utilisateur = {
-        id: socket.id,
+        return reply("Salon fermé, complet ou partie en cours.");
+      if (previous) {
+        clearTimeout(previous.expiry);
+        if (previous.socketId !== socket.id) {
+          const old = namespace.sockets.get(previous.socketId);
+          previous.socketId = socket.id;
+          previous.movementSequence = -1;
+          previous.scoreSequence = -1;
+          old?.emit("replaced");
+          old?.disconnect();
+        }
+        socket.join(room.id);
+        publish(room);
+        if (room.round && !room.round.ended) socket.emit("init", room.round);
+        if (room.round?.ended) socket.emit("roundEnded", resultSnapshot(room));
+        return reply();
+      }
+      for (const [id, pending] of Object.entries(rooms)) {
+        if (
+          id !== room.id &&
+          pending.proprietaireId === user.id &&
+          !pending.utilisateurs.length
+        )
+          delete rooms[id];
+      }
+      const player: Player = {
+        id: user.id,
         userId: user.id,
         nomUtilisateur: user.nomUtilisateur,
-        room: salon.id,
+        room: room.id,
+        score: 0,
       };
-      salon.utilisateurs.push(utilisateur);
-      socket.join(salon.id);
-      jeuNsp
-        .to(salon.id)
-        .emit("roomData", { room: salon.id, utilisateurs: salon.utilisateurs });
-      salonNsp.emit("majSalonDeJeu", salons);
+      members.set(user.id, {
+        player,
+        socketId: socket.id,
+        movementSequence: -1,
+        scoreSequence: -1,
+      });
+      room.utilisateurs.push(player);
+      socket.join(room.id);
+      publish(room);
       reply();
     });
+    socket.on("leave", (callback) => {
+      const member = active();
+      if (member) {
+        remove(member);
+        socket.leave(member.player.room);
+      }
+      if (typeof callback === "function") callback();
+    });
     socket.on("afficherBtnPlay", () => {
-      const salon = utilisateur && salons[utilisateur.room];
-      if (salon?.utilisateurs.length === 2)
-        jeuNsp
-          .to(salon.utilisateurs[0].id)
-          .emit("afficherBtnPlay", salon.utilisateurs[0].id);
+      const member = active(),
+        room = member && rooms[member.player.room];
+      if (room?.utilisateurs.length === 2 && !room.started) {
+        const host = members.get(room.proprietaireId);
+        if (host)
+          namespace.to(host.socketId).emit("afficherBtnPlay", host.player.id);
+      }
     });
     socket.on("startGame", () => {
-      if (!utilisateur) return;
-      const salon = salons[utilisateur.room];
+      const member = active(),
+        room = member && rooms[member.player.room];
       if (
-        !salon ||
-        salon.started ||
-        salon.utilisateurs.length !== 2 ||
-        salon.utilisateurs[0].id !== socket.id
+        !room ||
+        room.started ||
+        room.utilisateurs.length !== 2 ||
+        room.proprietaireId !== user.id
       )
         return;
-      salon.started = true;
-      salon.startedAt = Date.now();
-      jeuNsp.to(utilisateur.room).emit("init");
+      // Une place en reprise ne peut pas lancer une manche.
+      if (
+        room.utilisateurs.some(
+          (player) =>
+            !namespace.sockets.has(members.get(player.userId)?.socketId ?? ""),
+        )
+      )
+        return;
+      room.started = true;
+      room.startedAt = Date.now();
+      room.round = {
+        id: randomUUID(),
+        startedAt: room.startedAt,
+        endsAt: room.startedAt + duration,
+        ended: false,
+        saved: false,
+      };
+      const timer = setTimeout(() => {
+        void end(room);
+      }, duration);
+      timer.unref();
+      timers.set(room.id, timer);
+      namespace.to(room.id).emit("init", room.round);
+      publish(room);
     });
     socket.on("deplacementMonJoueur", (payload) => {
-      const parsed = movementInputSchema.safeParse(payload);
-      if (!utilisateur || !salons[utilisateur.room]?.started || !parsed.success)
+      const parsed = movementInputSchema.safeParse(payload),
+        member = active();
+      const round = member && rooms[member.player.room]?.round;
+      if (
+        !parsed.success ||
+        !member ||
+        !round ||
+        round.ended ||
+        round.endsAt <= Date.now() ||
+        parsed.data.roundId !== round.id ||
+        parsed.data.sequence <= member.movementSequence
+      )
         return;
+      member.movementSequence = parsed.data.sequence;
       const input = parsed.data.etat;
       const etat: PlayerState = {
         runningRight: input.runningRight === true,
@@ -84,63 +240,74 @@ export default function game(
         dead: input.dead === true,
       };
       socket
-        .to(utilisateur.room)
-        .emit("deplacementMonJoueur", { id: socket.id, etat });
+        .to(member.player.room)
+        .emit("deplacementMonJoueur", { id: user.id, etat });
     });
     socket.on("score", (payload) => {
-      const parsed = scoreInputSchema.safeParse(payload);
-      if (!utilisateur || !salons[utilisateur.room]?.started || !parsed.success)
+      const parsed = scoreInputSchema.safeParse(payload),
+        member = active();
+      const round = member && rooms[member.player.room]?.round;
+      if (
+        !parsed.success ||
+        !member ||
+        !round ||
+        round.ended ||
+        round.endsAt <= Date.now() ||
+        parsed.data.roundId !== round.id ||
+        parsed.data.sequence <= member.scoreSequence ||
+        parsed.data.score !== member.player.score + 1
+      )
         return;
-      socket
-        .to(utilisateur.room)
-        .emit("score", { id: socket.id, score: parsed.data.score });
+      member.scoreSequence = parsed.data.sequence;
+      member.player.score = parsed.data.score;
+      namespace.to(member.player.room).emit("score", {
+        id: user.id,
+        score: member.player.score,
+        roundId: round.id,
+      });
     });
     socket.on("scoreFinDeJeu", async (payload, callback) => {
-      const reply = (error?: string) => {
-        if (typeof callback === "function") {
-          if (error) callback(error);
-          else callback();
+      const parsed = resultSchema.safeParse(payload),
+        member = active();
+      const room = member && rooms[member.player.room],
+        round = room?.round;
+      if (!parsed.success || !round?.ended || parsed.data.roundId !== round.id)
+        return (
+          typeof callback === "function" &&
+          callback("Score invalide ou manche encore en cours.")
+        );
+      if (!round.saved && room) {
+        try {
+          await saveRound(
+            round,
+            participants.get(round.id) ?? room.utilisateurs,
+          );
+          round.saved = true;
+          delete round.saveError;
+        } catch {
+          return (
+            typeof callback === "function" &&
+            callback("Le score n’a pas pu être enregistré.")
+          );
         }
-      };
-      const salon = utilisateur && salons[utilisateur.room],
-        adversaire = salon?.utilisateurs.find((user) => user.id !== socket.id),
-        parsed = resultSchema.safeParse(payload);
-      if (
-        !utilisateur ||
-        !salon?.started ||
-        saved ||
-        !adversaire ||
-        !parsed.success
-      )
-        return reply("Score invalide.");
-      saved = true;
-      try {
-        await Score.create({
-          monJoueurId: socketUser(socket).id,
-          monNom: utilisateur.nomUtilisateur,
-          monScore: parsed.data.monScore,
-          nomUtilisateurAutreJoueur: adversaire.nomUtilisateur,
-          scoreAutreJoueur: parsed.data.scoreAutreJoueur,
-        });
-        reply();
-      } catch {
-        saved = false;
-        reply("Le score n’a pas pu être enregistré.");
       }
+      if (typeof callback === "function") callback();
     });
-    socket.on("disconnect", () => {
-      if (!utilisateur) return;
-      const salon = salons[utilisateur.room];
-      if (!salon) return;
-      salon.utilisateurs = salon.utilisateurs.filter(
-        (user) => user.id !== socket.id,
-      );
-      jeuNsp.to(utilisateur.room).emit("roomData", {
-        room: utilisateur.room,
-        utilisateurs: salon.utilisateurs,
-      });
-      if (!salon.utilisateurs.length) delete salons[utilisateur.room];
-      salonNsp.emit("majSalonDeJeu", salons);
+    socket.on("disconnect", (reason) => {
+      const member = active();
+      if (!member) return;
+      if (
+        reason === "server namespace disconnect" ||
+        reason === "forced server close"
+      ) {
+        remove(member);
+        return;
+      }
+      // Le remplacement d'une ancienne connexion ne libère jamais la nouvelle place.
+      member.expiry = setTimeout(() => {
+        if (active() === member) remove(member);
+      }, grace);
+      member.expiry.unref();
     });
   });
 }
