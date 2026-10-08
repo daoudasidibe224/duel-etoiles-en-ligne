@@ -4,11 +4,12 @@ import {
   type ServerEvents,
   type ClientEvents,
 } from "../shared/contracts";
-import { element } from "./dom";
+import { accessEnded, element } from "./dom";
 const client: Socket<ServerEvents, ClientEvents> = io();
 const list = document.querySelector(".partieDisponible"),
   status = element("connection-status");
 if (!list) throw new Error("Liste des salons introuvable");
+client.on("accessEnded", accessEnded);
 client.on("connect", () => {
   status.textContent = "En ligne";
   client.emit("join", {}, () => {});

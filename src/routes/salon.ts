@@ -1,14 +1,14 @@
-import { authenticatedUser } from "../types";
+import { gameUser, sessionId } from "../types";
 import { randomUUID } from "node:crypto";
 import { Router } from "express";
 const router = Router();
-import { assurerAuthentification } from "../config/auth";
-router.use(assurerAuthentification);
+import { assurerJeu } from "../config/auth";
+router.use(assurerJeu);
 router.get("/", (req, res) => res.render("salon", { salons: req.app.salons }));
 router.get("/discussion&jeu", (req, res) => res.render("discussionForm"));
 router.post("/salonDeJeu/room", (req, res) => {
   const salons = req.app.salons;
-  const userId = authenticatedUser(req).id;
+  const userId = gameUser(req).id;
   const current = Object.values(salons).find(
     (room) =>
       room.proprietaireId === userId ||
@@ -22,11 +22,12 @@ router.post("/salonDeJeu/room", (req, res) => {
   const room = randomUUID();
   salons[room] = {
     id: room,
-    nomProprietaire: authenticatedUser(req).nomUtilisateur,
-    proprietaireId: authenticatedUser(req).id,
+    nomProprietaire: gameUser(req).nomUtilisateur,
+    proprietaireId: gameUser(req).id,
     utilisateurs: [],
     createdAt: Date.now(),
   };
+  req.app.roomSessions.set(room, sessionId(req));
   res.redirect(`/salon/salonDeJeu/${room}`);
 });
 router.get("/salonDeJeu/:room", (req, res) => {
@@ -38,9 +39,7 @@ router.get("/salonDeJeu/:room", (req, res) => {
     });
   if (
     (salon.utilisateurs.length >= 2 || salon.started) &&
-    !salon.utilisateurs.some(
-      (player) => player.userId === authenticatedUser(req).id,
-    )
+    !salon.utilisateurs.some((player) => player.userId === gameUser(req).id)
   )
     return res.status(409).render("erreur", {
       titre: "Salon complet",

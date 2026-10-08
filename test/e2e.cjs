@@ -61,6 +61,9 @@ const assert = require("node:assert/strict");
   });
   async function signUp(page, name) {
     await page.goto(base + "/inscription");
+    await page
+      .getByText("Choisir un pseudo (facultatif)", { exact: true })
+      .click();
     await page.locator("#nomUtilisateur").fill(name);
     await page.locator("#email").fill(name + "@example.test");
     await page.locator("#mdp").fill("Password1234");
@@ -70,6 +73,39 @@ const assert = require("node:assert/strict");
   }
   await signUp(one, "qa_one");
   await signUp(two, "qa_two");
+  const optionalError = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+  });
+  track(optionalError);
+  await optionalError.goto(base + "/inscription");
+  await optionalError.locator("#email").fill("pseudo-collision@example.test");
+  await optionalError.locator("#mdp").fill("Password1234");
+  await optionalError
+    .getByText("Choisir un pseudo (facultatif)", { exact: true })
+    .click();
+  await optionalError.locator("#nomUtilisateur").fill("qa_one");
+  await optionalError.getByRole("button", { name: "Créer mon compte" }).click();
+  await optionalError
+    .getByText("Ce pseudo est déjà utilisé.", { exact: true })
+    .waitFor();
+  assert.equal(
+    await optionalError
+      .locator("details.optional-profile")
+      .getAttribute("open"),
+    "",
+  );
+  assert.equal(
+    await optionalError.locator("#nomUtilisateur").getAttribute("aria-invalid"),
+    "true",
+  );
+  assert.equal(
+    await optionalError.evaluate(() =>
+      document.activeElement?.getAttribute("role"),
+    ),
+    "alert",
+  );
+  await optionalError.close();
+
   await two.screenshot({
     path: path.join(results, "jeu-mobile-lobby.png"),
     fullPage: true,

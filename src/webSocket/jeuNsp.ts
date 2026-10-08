@@ -15,6 +15,7 @@ import {
 interface Membership {
   player: Player;
   socketId: string;
+  sessionId: string;
   movementSequence: number;
   scoreSequence: number;
   expiry?: ReturnType<typeof setTimeout>;
@@ -24,6 +25,7 @@ export default function game(
   lobby: GameNamespace,
   rooms: Rooms,
   options: { durationMs?: number; reconnectMs?: number } = {},
+  roomSessions = new Map<string, string>(),
 ) {
   const arenas = new Map<string, Arena>();
   const members = new Map<string, Membership>();
@@ -89,6 +91,7 @@ export default function game(
       namespace.in(room.id).socketsLeave(room.id);
       if (room.round) participants.delete(room.round.id);
       delete rooms[room.id];
+      roomSessions.delete(room.id);
     } else {
       room.utilisateurs = room.utilisateurs.filter(
         (player) => player.userId !== member.player.userId,
@@ -96,12 +99,18 @@ export default function game(
       if (!room.utilisateurs.length) {
         if (room.round) participants.delete(room.round.id);
         delete rooms[room.id];
+        roomSessions.delete(room.id);
       } else publish(room);
     }
     lobby.emit("majSalonDeJeu", rooms);
   };
   namespace.on("connection", (socket: GameSocket) => {
     const user = socketUser(socket);
+    const sid = socket.request.sessionID;
+    if (!sid) {
+      socket.disconnect(true);
+      return;
+    }
     socket.emit("identity", user.id);
     const active = () => {
       const member = members.get(user.id);
@@ -132,11 +141,13 @@ export default function game(
         if (previous.socketId !== socket.id) {
           const old = namespace.sockets.get(previous.socketId);
           previous.socketId = socket.id;
+          previous.sessionId = sid;
           previous.movementSequence = -1;
           previous.scoreSequence = -1;
           old?.emit("replaced");
           old?.disconnect();
         }
+        if (room.proprietaireId === user.id) roomSessions.set(room.id, sid);
         socket.join(room.id);
         publish(room);
         if (room.round && !room.round.ended) socket.emit("init", room.round);
@@ -148,8 +159,10 @@ export default function game(
           id !== room.id &&
           pending.proprietaireId === user.id &&
           !pending.utilisateurs.length
-        )
+        ) {
           delete rooms[id];
+          roomSessions.delete(id);
+        }
       }
       const player: Player = {
         id: user.id,
@@ -158,14 +171,17 @@ export default function game(
         room: room.id,
         score: 0,
         usedStages: [],
+        kind: user.kind,
       };
       members.set(user.id, {
         player,
         socketId: socket.id,
+        sessionId: sid,
         movementSequence: -1,
         scoreSequence: -1,
       });
       room.utilisateurs.push(player);
+      if (room.proprietaireId === user.id) roomSessions.set(room.id, sid);
       socket.join(room.id);
       publish(room);
       reply();
@@ -302,13 +318,11 @@ export default function game(
         const points = arena.collect(user.id, parsed.data.starId);
         member.scoreSequence = parsed.data.sequence;
         if (points)
-          namespace
-            .to(member.player.room)
-            .emit("score", {
-              id: user.id,
-              score: member.player.score,
-              roundId: round.id,
-            });
+          namespace.to(member.player.room).emit("score", {
+            id: user.id,
+            score: member.player.score,
+            roundId: round.id,
+          });
         reply();
       } catch (error) {
         reply(error instanceof Error ? error.message : "Étoile indisponible.");
@@ -352,10 +366,32 @@ export default function game(
         return;
       }
       // Le remplacement d'une ancienne connexion ne libère jamais la nouvelle place.
-      member.expiry = setTimeout(() => {
-        if (active() === member) remove(member);
-      }, grace);
+      member.expiry = setTimeout(
+        () => {
+          if (active() === member) remove(member);
+        },
+        Math.max(
+          0,
+          Math.min(grace, (user.expiresAt ?? Date.now() + grace) - Date.now()),
+        ),
+      );
       member.expiry.unref();
     });
   });
+  return (id: string, sessionId?: string) => {
+    const member = members.get(id);
+    if (member && (!sessionId || member.sessionId === sessionId))
+      remove(member);
+    for (const [key, room] of Object.entries(rooms)) {
+      if (
+        room.proprietaireId === id &&
+        !room.utilisateurs.length &&
+        (!sessionId || roomSessions.get(key) === sessionId)
+      ) {
+        delete rooms[key];
+        roomSessions.delete(key);
+      }
+    }
+    lobby.emit("majSalonDeJeu", rooms);
+  };
 }

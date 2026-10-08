@@ -1,9 +1,26 @@
+import type { Identity, Guest, IdentityAuthority } from "./services/identities";
 import type { Request } from "express";
 import type { Namespace, Server, Socket } from "socket.io";
 import type { ClientEvents, ServerEvents, Rooms } from "../shared/contracts";
-export type GameServer = Server<ClientEvents, ServerEvents>;
-export type GameNamespace = Namespace<ClientEvents, ServerEvents>;
-export type GameSocket = Socket<ClientEvents, ServerEvents>;
+export type SocketData = { identity?: Identity };
+export type GameServer = Server<
+  ClientEvents,
+  ServerEvents,
+  Record<string, never>,
+  SocketData
+>;
+export type GameNamespace = Namespace<
+  ClientEvents,
+  ServerEvents,
+  Record<string, never>,
+  SocketData
+>;
+export type GameSocket = Socket<
+  ClientEvents,
+  ServerEvents,
+  Record<string, never>,
+  SocketData
+>;
 declare global {
   namespace Express {
     interface User {
@@ -18,12 +35,17 @@ declare global {
 declare module "express-session" {
   interface SessionData {
     csrfToken?: string;
+    guest?: Guest;
+    returnTo?: string;
   }
 }
 declare module "express-serve-static-core" {
   interface Application {
     io: GameServer;
     salons: Rooms;
+    identities: IdentityAuthority;
+    releasePlayer: (id: string, sessionId?: string) => void;
+    roomSessions: Map<string, string>;
   }
 }
 declare module "http" {
@@ -36,7 +58,41 @@ export function authenticatedUser(req: Request): Express.User {
   if (!req.user) throw new Error("Connexion nécessaire");
   return req.user;
 }
-export function socketUser(socket: GameSocket): Express.User {
-  if (!socket.request.user) throw new Error("Connexion nécessaire");
-  return socket.request.user;
+export function gameUser(req: Request): Identity {
+  const user = req.app.identities.resolve(
+    req.sessionID,
+    req.user,
+    req.session.guest,
+    req.session.cookie.expires?.getTime(),
+  );
+  if (!user) throw new Error("Accès au jeu nécessaire");
+  return user;
+}
+export function socketUser(socket: GameSocket): Identity {
+  if (!socket.data.identity) throw new Error("Accès au jeu nécessaire");
+  return socket.data.identity;
+}
+export function sessionId(req: Request): string {
+  if (!req.sessionID) throw new Error("Session absente");
+  return req.sessionID;
+}
+export function revokeAccess(req: Request) {
+  req.app.identities.revoke(sessionId(req));
+  const ids = new Set(
+    [req.user?.id, req.session.guest?.id].filter((id): id is string =>
+      Boolean(id),
+    ),
+  );
+  for (const id of ids) req.app.releasePlayer(id, req.sessionID);
+  for (const name of ["/", "/jeu", "/discussion"]) {
+    for (const socket of req.app.io.of(name).sockets.values()) {
+      if (socket.request.sessionID === req.sessionID) {
+        socket.emit(
+          "accessEnded",
+          "Cette session a été fermée. Reprenez l’accès au jeu pour continuer.",
+        );
+        socket.disconnect(true);
+      }
+    }
+  }
 }

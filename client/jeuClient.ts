@@ -12,7 +12,7 @@ import {
   type PlayerState,
 } from "../shared/contracts";
 import { activeBonus, stageAt, STAGES } from "../shared/progression";
-import { element, canvasElement } from "./dom";
+import { accessEnded, element, canvasElement } from "./dom";
 const client: Socket<ServerEvents, ClientEvents> = io("/jeu", {
   transports: ["websocket"],
 });
@@ -56,6 +56,7 @@ function playMusic() {
 class Runner {
   frame = 0;
   score = 0;
+  kind: Player["kind"] = "account";
   bonus: Player["bonus"];
   usedStages: number[] = [];
   x: number;
@@ -126,10 +127,19 @@ function updateHud() {
   element("stage-name").textContent =
     `Étape ${phase + 1} / 3 · ${(STAGES[phase] ?? STAGES[0]).name}`;
   element("stage-progress").setAttribute(
+    "max",
+    String(
+      currentRound ? (currentRound.endsAt - currentRound.startedAt) / 1000 : 90,
+    ),
+  );
+  element("stage-progress").setAttribute(
     "value",
     String(
       currentRound
-        ? Math.min(90, (Date.now() - currentRound.startedAt) / 1000)
+        ? Math.min(
+            (currentRound.endsAt - currentRound.startedAt) / 1000,
+            (Date.now() - currentRound.startedAt) / 1000,
+          )
         : 0,
     ),
   );
@@ -182,10 +192,16 @@ function finish() {
         : `${opponent.name} a gagné.`;
   element("monScore").textContent = `Votre score : ${self.score}`;
   element("autreScore").textContent = `${opponent.name} : ${opponent.score}`;
-  status.textContent = currentRound?.saved
-    ? "Score enregistré. Retrouvez cette partie dans vos scores."
-    : currentRound?.saveError || "Enregistrement du score…";
-  element("retry-score").classList.toggle("cacher", !currentRound?.saveError);
+  status.textContent =
+    self.kind === "guest"
+      ? "Partie terminée. Votre score invité reste visible ici."
+      : currentRound?.saved
+        ? "Score enregistré. Retrouvez cette partie dans vos scores."
+        : currentRound?.saveError || "Enregistrement du score…";
+  element("retry-score").classList.toggle(
+    "cacher",
+    self.kind === "guest" || !currentRound?.saveError,
+  );
 }
 function draw() {
   if (!running || !ctx) return;
@@ -300,6 +316,7 @@ client.on("roomClosed", (reason) => {
   start.classList.add("cacher");
   status.textContent = reason;
 });
+client.on("accessEnded", accessEnded);
 client.on("connect", () =>
   client.emit("join", { room }, (error) => {
     if (error) {
@@ -351,6 +368,7 @@ client.on("roomData", (payload) => {
         player.userId === parsed.data.ownerId ? 430 : 530,
       );
       self.score = player.score;
+      self.kind = player.kind;
       self.bonus = player.bonus;
       self.usedStages = player.usedStages;
     } else if (!others.has(player.id))

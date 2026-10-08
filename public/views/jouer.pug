@@ -1,0 +1,23 @@
+include includes/head.pug
+body
+  include includes/header.pug
+  main#contenu.auth-layout.guest-access
+    section.auth-card.console-frame(aria-labelledby='form-title')
+      .console-label
+        span ACCÈS DIRECT
+        span.system-light Sans inscription
+      h1#form-title Jouer maintenant
+      p.muted Deux joueurs, 90 secondes. Choisissez votre pseudo.
+      include includes/messages.pug
+      form(action='/utilisateur/invite' method='post')
+        input(type='hidden' name='_csrf' value=csrfToken)
+        .field
+          label.label(for='nomUtilisateur') Votre pseudo
+          input#nomUtilisateur.input(type='text' name='nomUtilisateur' required minlength='3' maxlength='24' pattern='[A-Za-z0-9_-]{3,24}' autocomplete='nickname' value=typeof nomUtilisateur !== 'undefined' ? nomUtilisateur : '' aria-describedby='guest-help' aria-invalid=typeof erreurs !== 'undefined' ? 'true' : undefined)
+          p#guest-help.help 3 à 24 lettres sans accent, chiffres, tirets ou tirets bas.
+        button.button.is-primary.is-fullwidth(type='submit') Jouer par pseudo →
+      p.help La session invitée reste disponible 8 heures dans ce navigateur. Les scores invités restent sur l’écran de fin.
+      .guest-account-options
+        a(href='/connexion') Connexion avec un compte
+        a(href='/inscription') Créer un compte pour garder mes scores
+  include includes/footer.pug

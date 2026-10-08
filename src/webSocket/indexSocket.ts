@@ -7,12 +7,14 @@ export default function registerSockets({
   io,
   salons,
   gameOptions,
+  roomSessions,
 }: {
   io: GameServer;
   salons: Rooms;
   gameOptions?: { durationMs?: number; reconnectMs?: number };
+  roomSessions: Map<string, string>;
 }) {
   discussion(io.of("/discussion"));
-  lobby(io.of("/"), salons);
-  game(io.of("/jeu"), io.of("/"), salons, gameOptions);
+  lobby(io.of("/"), salons, roomSessions);
+  return game(io.of("/jeu"), io.of("/"), salons, gameOptions, roomSessions);
 }

@@ -6,8 +6,10 @@ body
       .console-label
         span ACCÈS JOUEUR
         span.system-light En attente
-      h1#form-title Connexion
-      p.muted Deux joueurs. 90 secondes. Attrapez les étoiles.
+      h1#form-title Connexion compte
+      p.muted Retrouvez votre historique de scores.
+      if joueur && joueur.kind === 'guest'
+        p.help La connexion quitte votre salon invité. Les points invités ne sont pas transférés.
       include includes/messages.pug
       form(action='/utilisateur/connexion' method='post')
         input(type='hidden' name='_csrf' value=csrfToken)
@@ -19,7 +21,7 @@ body
           input#mdp.input(type='password' name='mdp' required autocomplete='current-password')
           button.password-toggle(type='button' data-password-toggle='mdp' aria-controls='mdp' aria-pressed='false') Afficher le mot de passe
         button.button.is-primary.is-fullwidth(type='submit') Entrer dans l’arcade →
-      p.form-foot Vous découvrez le jeu ?
+      p.form-foot #[a(href='/jouer') Jouer par pseudo] · Pas de compte ?
         | #{' '}
         a(href='/inscription') Créer un compte
   include includes/footer.pug

@@ -1,4 +1,4 @@
-import { authenticatedUser } from "../types";
+import { authenticatedUser, revokeAccess, sessionId } from "../types";
 import express from "express";
 import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
@@ -42,9 +42,15 @@ router.post("/inscription", authLimit, async (req, res, next) => {
       .status(422)
       .render("inscription", { erreurs, nomUtilisateur, email });
   try {
-    if (await Utilisateur.exists({ $or: [{ email }, { nomUtilisateur }] }))
+    const existing = await Utilisateur.findOne({
+      $or: [{ email }, { nomUtilisateur }],
+    });
+    if (existing)
       return res.status(409).render("inscription", {
-        erreurs: { compte: "Cet email ou ce pseudo est déjà utilisé." },
+        erreurs:
+          existing.email === email
+            ? { email: "Cet email est déjà utilisé." }
+            : { nomUtilisateur: "Ce pseudo est déjà utilisé." },
         nomUtilisateur,
         email,
       });
@@ -53,8 +59,10 @@ router.post("/inscription", authLimit, async (req, res, next) => {
       email,
       mdp: await bcrypt.hash(mdp, 12),
     });
+    const target = req.session.returnTo || "/salon";
+    revokeAccess(req);
     req.login(utilisateur, (error) =>
-      error ? next(error) : res.redirect("/salon"),
+      error ? next(error) : res.redirect(target),
     );
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === 11000)
@@ -96,27 +104,81 @@ router.post(
     }
   },
 );
+router.post("/invite", authLimit, async (req, res, next) => {
+  if (req.user) return res.redirect("/salon");
+  const pseudo =
+    typeof req.body?.nomUtilisateur === "string"
+      ? req.body.nomUtilisateur.trim().toLowerCase()
+      : "";
+  if (!validName(pseudo))
+    return res
+      .status(422)
+      .render("jouer", {
+        nomUtilisateur: pseudo,
+        erreurs: {
+          pseudo: "Choisissez 3 à 24 lettres, chiffres, tirets ou tirets bas.",
+        },
+      });
+  try {
+    if (req.session.guest && req.session.guest.expiresAt <= Date.now())
+      req.app.releasePlayer(req.session.guest.id, req.sessionID);
+    req.session.guest = req.app.identities.enter(
+      sessionId(req),
+      req.session.guest,
+      pseudo,
+    );
+    const target = req.session.returnTo || "/salon";
+    delete req.session.returnTo;
+    req.session.save((error) => (error ? next(error) : res.redirect(target)));
+  } catch (error) {
+    return res
+      .status(409)
+      .render("jouer", {
+        nomUtilisateur: pseudo,
+        erreurs: {
+          session:
+            error instanceof Error ? error.message : "Session indisponible.",
+        },
+      });
+  }
+});
 router.post("/connexion", authLimit, (req, res, next) => {
   if (typeof req.body?.email !== "string" || typeof req.body?.mdp !== "string")
-    return res.status(422).send("Saisissez un email et un mot de passe.");
-  passport.authenticate("local", {
-    successRedirect: "/salon",
-    failureRedirect: "/connexion",
-    failureFlash: true,
-  })(req, res, next);
+    return res
+      .status(422)
+      .render("connexion", {
+        erreurs: { form: "Saisissez un email et un mot de passe." },
+      });
+  passport.authenticate(
+    "local",
+    (error: unknown, user: Express.User | false | null, info: unknown) => {
+      if (error) return next(error);
+      if (!user) {
+        const message =
+          info &&
+          typeof info === "object" &&
+          "message" in info &&
+          typeof info.message === "string"
+            ? info.message
+            : "Email ou mot de passe incorrect.";
+        req.flash("error", message);
+        return res.redirect("/connexion");
+      }
+      const target = req.session.returnTo || "/salon";
+      revokeAccess(req);
+      req.login(user, (err) => (err ? next(err) : res.redirect(target)));
+    },
+  )(req, res, next);
 });
 router.post("/deconnexion", (req, res, next) => {
-  for (const namespace of ["/", "/jeu", "/discussion"].map((name) =>
-    req.app.io.of(name),
-  )) {
-    for (const socket of namespace.sockets.values())
-      if (socket.request.sessionID === req.sessionID) socket.disconnect(true);
-  }
+  revokeAccess(req);
   req.logout((error) => {
     if (error) return next(error);
-    req.session.destroy((err) =>
-      err ? next(err) : res.redirect("/connexion"),
-    );
+    req.session.destroy((err) => {
+      if (err) return next(err);
+      res.clearCookie("run.sid");
+      res.redirect("/jouer");
+    });
   });
 });
 export default router;

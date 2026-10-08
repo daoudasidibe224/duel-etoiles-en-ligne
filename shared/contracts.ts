@@ -24,6 +24,7 @@ export const bonusInputSchema = z.object({
 export type BonusInput = z.infer<typeof bonusInputSchema>;
 export const playerSchema = publicUserSchema.extend({
   userId: z.string(),
+  kind: z.enum(["account", "guest"]).default("account"),
   room: z.string(),
   score: z.number().int().nonnegative().default(0),
   bonus: bonusSchema.optional(),
@@ -123,6 +124,7 @@ export interface ServerEvents {
   afficherBtnPlay: (id: string) => void;
   identity: (userId: string) => void;
   replaced: () => void;
+  accessEnded: (message: string) => void;
   roomClosed: (reason: string) => void;
   roundEnded: (payload: z.infer<typeof gameRoomSchema>) => void;
   init: (round: Round) => void;

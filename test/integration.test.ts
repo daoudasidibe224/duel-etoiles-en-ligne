@@ -102,10 +102,7 @@ after(async () => {
   await mongo.stop();
 });
 test("accès protégé, erreurs et protection des formulaires", async () => {
-  assert.equal(
-    (await request(app).get("/salon")).headers.location,
-    "/connexion",
-  );
+  assert.equal((await request(app).get("/salon")).headers.location, "/jouer");
   assert.equal(
     (await request(app).get("/salon/salonDeJeu/missing")).status,
     302,
@@ -224,8 +221,10 @@ test("une place par compte : doublons, reprise, changement de salon, départs et
   assert.match(await first.emitWithAck("join", null), /invalide/);
   assert.equal(await first.emitWithAck("join", { room }), undefined);
   const replaced = socketEvent(first, "replaced", z.undefined());
+  const disconnected = socketEvent(first, "disconnect", z.string());
   assert.equal(await second.emitWithAck("join", { room }), undefined);
   await replaced;
+  await disconnected;
   assert.equal(first.connected, false);
   for (let i = 0; i < 4; i++) {
     assert.deepEqual(
@@ -507,7 +506,7 @@ test("discussion liée à la session et messages bornés", async () => {
         .type("form")
         .send({ _csrf: token(page.text) })
     ).headers.location,
-    "/connexion",
+    "/jouer",
   );
   assert.equal((await a.agent.get("/profil")).status, 302);
 });
@@ -637,7 +636,9 @@ test("progression, étoiles communes et bonus ne se rejouent pas après reprise"
     );
     assert.equal(fresh.app.salons[room].utilisateurs[0]?.score, 2);
     const takeover = await joinClient(accountA.cookie);
+    const oldDisconnected = socketEvent(owner, "disconnect", z.string());
     await takeover.emitWithAck("join", { room });
+    await oldDisconnected;
     assert.equal(owner.connected, false);
     assert.deepEqual(fresh.app.salons[room].utilisateurs[0]?.usedStages, [1]);
     assert.equal(fresh.app.salons[room].utilisateurs.length, 2);

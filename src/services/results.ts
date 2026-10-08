@@ -3,23 +3,27 @@ import type { Player, Round } from "../../shared/contracts";
 async function persistRound(round: Round, players: Player[]): Promise<void> {
   if (players.length !== 2) throw new Error("Résultat incomplet.");
   await Promise.all(
-    players.map((player) => {
-      const opponent = players.find((value) => value.userId !== player.userId);
-      if (!opponent)
-        throw new Error("Deux comptes distincts sont nécessaires.");
-      return Score.updateOne(
-        { matchId: round.id, monJoueurId: player.userId },
-        {
-          $setOnInsert: {
-            monNom: player.nomUtilisateur,
-            monScore: player.score,
-            nomUtilisateurAutreJoueur: opponent.nomUtilisateur,
-            scoreAutreJoueur: opponent.score,
+    players
+      .filter((player) => player.kind === "account")
+      .map((player) => {
+        const opponent = players.find(
+          (value) => value.userId !== player.userId,
+        );
+        if (!opponent)
+          throw new Error("Deux joueurs distincts sont nécessaires.");
+        return Score.updateOne(
+          { matchId: round.id, monJoueurId: player.userId },
+          {
+            $setOnInsert: {
+              monNom: player.nomUtilisateur,
+              monScore: player.score,
+              nomUtilisateurAutreJoueur: opponent.nomUtilisateur,
+              scoreAutreJoueur: opponent.score,
+            },
           },
-        },
-        { upsert: true, runValidators: true },
-      );
-    }),
+          { upsert: true, runValidators: true },
+        );
+      }),
   );
 }
 

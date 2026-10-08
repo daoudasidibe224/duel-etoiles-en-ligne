@@ -5,7 +5,9 @@ body
     header.page-heading
       p.eyebrow DUEL / LOBBY
       h1.title Choisir une partie
-      p.muted Bienvenue #{utilisateur.nomUtilisateur}. Ouvrez une partie ou rejoignez un joueur.
+      p.muted Bienvenue #{joueur.nomUtilisateur}. Ouvrez une partie ou rejoignez un joueur.
+    if joueur.kind === 'guest'
+      p.guest-notice Mode invité : scores visibles à la fin de la manche. #[a(href='/inscription') Créer un compte] pour conserver les prochaines parties.
     include includes/messages.pug
     .lobby-layout
       section.panel.lobby-games(aria-labelledby='parties-titre')

@@ -15,7 +15,7 @@
     "build": "tsc -p tsconfig.server.json && node scripts/build-client.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint src client shared server.ts",
-    "test:e2e": "node test/e2e.cjs"
+    "test:e2e": "node test/e2e.cjs && node test/guests.e2e.cjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

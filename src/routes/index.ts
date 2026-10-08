@@ -3,7 +3,19 @@ import { Router } from "express";
 const router = Router();
 import { authentifie, assurerAuthentification } from "../config/auth";
 import Score from "../models/Score";
-router.get("/", (req, res) => res.redirect("/connexion"));
+router.get("/", (req, res) => res.redirect("/jouer"));
+router.get("/jouer", (req, res) => {
+  if (
+    req.app.identities.resolve(
+      req.sessionID,
+      req.user,
+      req.session.guest,
+      req.session.cookie.expires?.getTime(),
+    )
+  )
+    return res.redirect("/salon");
+  res.render("jouer");
+});
 router.get("/connexion", authentifie, (req, res) => res.render("connexion"));
 router.get("/inscription", authentifie, (req, res) =>
   res.render("inscription"),

@@ -7,7 +7,9 @@ body
         span NOUVEAU JOUEUR
         span.system-light Inscription
       h1#form-title Créer un compte
-      p.muted Un email et un mot de passe suffisent. Un pseudo vous est proposé automatiquement.
+      p.muted Gardez vos prochains scores avec un compte.
+      if joueur && joueur.kind === 'guest'
+        p.help Créer un compte quitte votre salon invité. Les points invités ne sont pas transférés.
       include includes/messages.pug
       form(action='/utilisateur/inscription' method='post')
         input(type='hidden' name='_csrf' value=csrfToken)
@@ -19,11 +21,13 @@ body
           input#mdp.input(type='password' name='mdp' required minlength='8' maxlength='72' autocomplete='new-password' aria-describedby='mdp-aide')
           button.password-toggle(type='button' data-password-toggle='mdp' aria-controls='mdp' aria-pressed='false') Afficher le mot de passe
           p#mdp-aide.help Au moins 8 caractères, au maximum 72 octets.
-        .field
-          label.label(for='nomUtilisateur') Pseudo (facultatif)
-          input#nomUtilisateur.input(type='text' name='nomUtilisateur' minlength='3' maxlength='24' pattern='[A-Za-z0-9_-]{3,24}' autocomplete='username' value=typeof nomUtilisateur !== 'undefined' ? nomUtilisateur : '' aria-invalid=typeof erreurs !== 'undefined' && erreurs.nomUtilisateur ? 'true' : undefined aria-describedby='pseudo-aide')
-          p#pseudo-aide.help 3 à 24 lettres, chiffres, tirets ou tirets bas.
+        details.optional-profile(open=Boolean(typeof erreurs !== 'undefined' && (erreurs.nomUtilisateur || (erreurs.compte && nomUtilisateur))))
+          summary Choisir un pseudo (facultatif)
+          .field
+            label.label(for='nomUtilisateur') Pseudo (facultatif)
+            input#nomUtilisateur.input(type='text' name='nomUtilisateur' minlength='3' maxlength='24' pattern='[A-Za-z0-9_-]{3,24}' autocomplete='username' value=typeof nomUtilisateur !== 'undefined' ? nomUtilisateur : '' aria-invalid=typeof erreurs !== 'undefined' && erreurs.nomUtilisateur ? 'true' : undefined aria-describedby='pseudo-aide')
+            p#pseudo-aide.help 3 à 24 lettres, chiffres, tirets ou tirets bas.
         button.button.is-primary.is-fullwidth(type='submit') Créer mon compte →
-      p.form-foot Déjà un compte ?
+      p.form-foot #[a(href='/jouer') Jouer par pseudo] · Déjà un compte ?
         a(href='/connexion') Se connecter
   include includes/footer.pug

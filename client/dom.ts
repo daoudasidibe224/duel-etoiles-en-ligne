@@ -14,3 +14,12 @@ export function inputElement(id: string): HTMLInputElement {
   if (!(node instanceof HTMLInputElement)) throw new Error("Champ introuvable");
   return node;
 }
+
+export function accessEnded(message: string) {
+  const alert = element("access-ended");
+  const text = element("access-ended-message");
+  text.textContent = message;
+  alert.classList.remove("cacher");
+  alert.focus();
+  window.dispatchEvent(new Event("session-ended"));
+}
