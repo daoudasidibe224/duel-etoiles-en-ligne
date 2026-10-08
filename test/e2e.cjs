@@ -64,7 +64,6 @@ const assert = require("node:assert/strict");
     await page.locator("#nomUtilisateur").fill(name);
     await page.locator("#email").fill(name + "@example.test");
     await page.locator("#mdp").fill("Password1234");
-    await page.locator("#mdp2").fill("Password1234");
     await page.getByRole("button", { name: "Créer mon compte" }).click();
     await page.waitForURL("**/salon");
     await page.getByText("En ligne", { exact: true }).waitFor();
@@ -137,6 +136,14 @@ const assert = require("node:assert/strict");
   await one.getByText("La partie a commencé.", { exact: true }).waitFor();
   await two.getByText("La partie a commencé.", { exact: true }).waitFor();
   assert.equal(await two.locator("#self-name").textContent(), "qa_two");
+  await one.getByRole("button", { name: "Points ×2" }).click();
+  await one.getByText("Bonus activé.", { exact: true }).waitFor();
+  assert.equal(await one.locator("#bonus-multiplier").isDisabled(), true);
+  await one.waitForFunction(
+    () => Number(document.querySelector("#self-score")?.textContent) >= 2,
+    null,
+    { timeout: 8000 },
+  );
   await b.setOffline(true);
   await two.reload({ timeout: 4000 }).catch(() => {});
   await b.setOffline(false);
@@ -162,6 +169,20 @@ const assert = require("node:assert/strict");
     await two.evaluate(() => document.documentElement.scrollWidth > innerWidth),
     false,
   );
+  await one
+    .getByText("Étape 2 / 3 · Cadence", { exact: true })
+    .waitFor({ timeout: 35000 });
+  await one
+    .getByRole("button", { name: "Accélération · 8 s", exact: true })
+    .click();
+  await one.getByText("Bonus activé.", { exact: true }).waitFor();
+  await one
+    .getByText("Étape 3 / 3 · Dernière ligne droite", { exact: true })
+    .waitFor({ timeout: 35000 });
+  await one
+    .getByRole("button", { name: "Points ×2 · 8 s", exact: true })
+    .click();
+  await one.getByText("Bonus activé.", { exact: true }).waitFor();
   await one
     .getByText("Score enregistré. Retrouvez cette partie dans vos scores.", {
       exact: true,
@@ -228,6 +249,8 @@ const assert = require("node:assert/strict");
           "same account concurrent tabs x3",
           "offline refresh and round resume",
           "start",
+          "server shared stars confirmed score",
+          "three stages and bonus per stage",
           "touch",
           "results",
           "stats",

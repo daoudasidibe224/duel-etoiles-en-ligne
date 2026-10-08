@@ -3,10 +3,31 @@ export const publicUserSchema = z.object({
   id: z.string(),
   nomUtilisateur: z.string(),
 });
+export const bonusSchema = z.object({
+  kind: z.enum(["sprint", "multiplier"]),
+  expiresAt: z.number(),
+  stage: z.number().int().min(0).max(2),
+});
+export const starSchema = z.object({
+  id: z.string().uuid(),
+  x: z.number().min(20).max(920),
+  bornAt: z.number(),
+  speed: z.number().positive(),
+});
+export type Star = z.infer<typeof starSchema>;
+export const bonusInputSchema = z.object({
+  id: z.string().uuid(),
+  roundId: z.string().uuid(),
+  stage: z.number().int().min(0).max(2),
+  kind: z.enum(["sprint", "multiplier"]),
+});
+export type BonusInput = z.infer<typeof bonusInputSchema>;
 export const playerSchema = publicUserSchema.extend({
   userId: z.string(),
   room: z.string(),
   score: z.number().int().nonnegative().default(0),
+  bonus: bonusSchema.optional(),
+  usedStages: z.array(z.number().int().min(0).max(2)).max(3).default([]),
 });
 export type Player = z.infer<typeof playerSchema>;
 export const roundSchema = z.object({
@@ -16,6 +37,8 @@ export const roundSchema = z.object({
   ended: z.boolean(),
   saved: z.boolean(),
   saveError: z.string().optional(),
+  stars: z.array(starSchema).max(20).default([]),
+  stage: z.number().int().min(0).max(2).default(0),
 });
 export type Round = z.infer<typeof roundSchema>;
 export const roomSchema = z.object({
@@ -48,7 +71,7 @@ export const movementInputSchema = actionSchema.extend({
 export const movementSchema = z.object({ id: z.string(), etat: stateSchema });
 export const scoreValueSchema = z.number().int().min(0).max(10000);
 export const scoreInputSchema = actionSchema.extend({
-  score: scoreValueSchema,
+  starId: z.string().uuid(),
 });
 export const scoreSchema = z.object({
   id: z.string(),
@@ -87,7 +110,8 @@ export interface ClientEvents {
   afficherBtnPlay: () => void;
   startGame: () => void;
   deplacementMonJoueur: (payload: unknown) => void;
-  score: (payload: unknown) => void;
+  score: (payload: unknown, callback: Ack) => void;
+  activateBonus: (payload: unknown, callback: Ack) => void;
   scoreFinDeJeu: (payload: unknown, callback: Ack) => void;
   envoyerMessage: (payload: unknown, callback: Ack) => void;
 }

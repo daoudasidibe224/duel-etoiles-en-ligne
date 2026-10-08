@@ -33,10 +33,23 @@ body
         .hud-player
           span#other-name Second joueur
           output#other-score(aria-label='Score du second joueur') 0
+      .stage-hud
+        p#stage-name Étape 1 / 3 · Prise en main
+        progress#stage-progress(value='0' max='90' aria-label='Progression de la manche')
       canvas#gameCanvas(width='960' height='540' aria-label='Aire de jeu. Déplacez votre joueur avec les flèches gauche et droite.')
       .touch-controls(aria-label='Commandes du joueur')
         button#move-left.button(type='button' aria-label='Se déplacer à gauche') ←
         button#move-right.button(type='button' aria-label='Se déplacer à droite') →
+      .bonus-controls(aria-label='Bonus du joueur')
+        button#bonus-sprint.button.is-outlined(type='button' disabled) Accélération · 8 s
+        button#bonus-multiplier.button.is-outlined(type='button' disabled) Points ×2 · 8 s
+        p#bonus-status Une charge par étape.
+        p#bonus-feedback(role='status')
+      details.game-rules
+        summary Règles et bonus
+        p Trois étapes de 30 secondes : les étoiles tombent de plus en plus vite. Chaque étoile est commune aux deux joueurs : le premier à la ramasser marque le point.
+        p Chaque étape offre une charge : accélération de 50 % ou points doublés pendant 8 secondes. Un seul bonus à la fois ; une charge non utilisée ne se reporte pas.
+        p Les flèches ou les commandes tactiles déplacent votre robot. Une coupure permet une reprise pendant 12 secondes ; quitter met fin à la manche.
       p#game-status(role='status')
       button#retry-score.button.is-outlined.cacher(type='button') Réessayer l’enregistrement
       #finPartie.menu

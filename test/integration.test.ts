@@ -165,6 +165,25 @@ test("inscription, normalisation, validation et connexion", async () => {
     "/salon",
   );
 });
+test("un email et un mot de passe suffisent, le pseudo proposé reste modifiable", async () => {
+  const agent = request.agent(app),
+    form = await agent.get("/inscription");
+  const result = await agent
+    .post("/utilisateur/inscription")
+    .type("form")
+    .send({
+      _csrf: token(form.text),
+      email: "minimal@example.test",
+      mdp: "Password1234",
+    });
+  assert.equal(result.headers.location, "/salon");
+  assert.match(
+    (await Utilisateur.findOne({ email: "minimal@example.test" }))
+      ?.nomUtilisateur || "",
+    /^joueur_[a-f0-9-]{8}$/,
+  );
+  assert.equal((await agent.get("/profil")).status, 200);
+});
 test("un joueur ne peut modifier le profil d’un autre", async () => {
   const { agent } = await register("profiltest");
   const victim = await Utilisateur.findOne({ nomUtilisateur: "alice" });
@@ -284,7 +303,7 @@ test("une place par compte : doublons, reprise, changement de salon, départs et
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(starts, 1);
   assert.equal(movements, 1);
-  assert.equal(scores, 1);
+  assert.equal(scores, 0);
   const refresh = await socket("/jeu", b.cookie);
   const resumeInit = socketEvent(refresh, "init", roundSchema);
   assert.equal(await refresh.emitWithAck("join", { room }), undefined);
@@ -306,7 +325,7 @@ test("une place par compte : doublons, reprise, changement de salon, départs et
   assert.equal(results.length, 2);
   assert.equal(
     results.find((value) => value.monNom === "joueur_a")?.monScore,
-    1,
+    0,
   );
   assert.equal(
     results.find((value) => value.monNom === "joueur_a")
@@ -517,6 +536,139 @@ test("comptes, sessions et scores persistent dans une nouvelle instance", async 
     assert.equal(stats.status, 200);
     assert.match(stats.text, /adversaire/);
   } finally {
+    await new Promise<void>((resolve) => fresh.io.close(() => resolve()));
+  }
+});
+
+test("progression, étoiles communes et bonus ne se rejouent pas après reprise", async () => {
+  const accountA = await register("bonus_owner"),
+    accountB = await register("bonus_guest");
+  const fresh = createApp({
+    secret: "a".repeat(48),
+    store,
+    gameOptions: { durationMs: 5000, reconnectMs: 500 },
+  });
+  await new Promise<void>((resolve) =>
+    fresh.server.listen(0, "127.0.0.1", resolve),
+  );
+  const bound = fresh.server.address();
+  assert.ok(bound && typeof bound !== "string");
+  const clients: Socket[] = [];
+  const joinClient = async (cookie: string) => {
+    const client = connect(`http://127.0.0.1:${bound.port}/jeu`, {
+      transports: ["websocket"],
+      extraHeaders: { Cookie: cookie },
+      forceNew: true,
+    });
+    clients.push(client);
+    await socketEvent(client, "connect", z.undefined());
+    return client;
+  };
+  try {
+    const page = await request(fresh.app)
+      .get("/salon")
+      .set("Cookie", accountA.cookie);
+    const opened = await request(fresh.app)
+      .post("/salon/salonDeJeu/room")
+      .set("Cookie", accountA.cookie)
+      .type("form")
+      .send({ _csrf: token(page.text) });
+    const room = opened.headers.location.split("/").pop();
+    assert.ok(room);
+    const owner = await joinClient(accountA.cookie),
+      guest = await joinClient(accountB.cookie);
+    await owner.emitWithAck("join", { room });
+    await guest.emitWithAck("join", { room });
+    const initialized = socketEvent(owner, "init", roundSchema);
+    owner.emit("startGame");
+    const round = await initialized,
+      star = round.stars[0];
+    assert.ok(star);
+    assert.match(
+      await owner.emitWithAck("score", {
+        roundId: round.id,
+        sequence: 1,
+        starId: star.id,
+      }),
+      /portée/,
+    );
+    assert.match(
+      await guest.emitWithAck("activateBonus", {
+        id: randomUUID(),
+        roundId: randomUUID(),
+        kind: "sprint",
+        stage: 0,
+      }),
+      /active/,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 3020));
+    assert.equal(fresh.app.salons[room].round?.stage, 1);
+    const bonus = {
+      id: randomUUID(),
+      roundId: round.id,
+      kind: "multiplier",
+      stage: 1,
+    };
+    assert.equal(await owner.emitWithAck("activateBonus", bonus), undefined);
+    const expiry = fresh.app.salons[room].utilisateurs[0]?.bonus?.expiresAt;
+    assert.ok(expiry);
+    assert.equal(await owner.emitWithAck("activateBonus", bonus), undefined);
+    assert.equal(
+      fresh.app.salons[room].utilisateurs[0]?.bonus?.expiresAt,
+      expiry,
+    );
+    assert.match(
+      await owner.emitWithAck("activateBonus", { ...bonus, kind: "sprint" }),
+      /autrement/,
+    );
+    assert.match(
+      await owner.emitWithAck("activateBonus", { ...bonus, id: randomUUID() }),
+      /déjà/,
+    );
+    const claim = { roundId: round.id, sequence: 2, starId: star.id };
+    assert.equal(await owner.emitWithAck("score", claim), undefined);
+    assert.equal(
+      await owner.emitWithAck("score", { ...claim, sequence: 3 }),
+      undefined,
+    );
+    assert.match(
+      await guest.emitWithAck("score", { ...claim, sequence: 1 }),
+      /ramassée/,
+    );
+    assert.equal(fresh.app.salons[room].utilisateurs[0]?.score, 2);
+    const takeover = await joinClient(accountA.cookie);
+    await takeover.emitWithAck("join", { room });
+    assert.equal(owner.connected, false);
+    assert.deepEqual(fresh.app.salons[room].utilisateurs[0]?.usedStages, [1]);
+    assert.equal(fresh.app.salons[room].utilisateurs.length, 2);
+    assert.equal(await takeover.emitWithAck("activateBonus", bonus), undefined);
+    assert.equal(
+      fresh.app.salons[room].utilisateurs[0]?.bonus?.expiresAt,
+      expiry,
+    );
+    const finished = socketEvent(takeover, "roundEnded", gameRoomSchema);
+    await finished;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    assert.match(
+      await takeover.emitWithAck("score", { ...claim, sequence: 9 }),
+      /active|Événement/,
+    );
+    assert.equal(
+      await takeover.emitWithAck("scoreFinDeJeu", { roundId: round.id }),
+      undefined,
+    );
+    assert.equal(await Score.countDocuments({ matchId: round.id }), 2);
+    assert.equal(
+      (
+        await Score.findOne({
+          matchId: round.id,
+          monJoueurId: fresh.app.salons[room].proprietaireId,
+        })
+      )?.monScore,
+      2,
+    );
+  } finally {
+    clients.forEach((client) => client.disconnect());
     await new Promise<void>((resolve) => fresh.io.close(() => resolve()));
   }
 });

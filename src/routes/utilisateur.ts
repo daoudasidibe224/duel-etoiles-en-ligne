@@ -1,5 +1,6 @@
 import { authenticatedUser } from "../types";
 import express from "express";
+import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import passport from "passport";
 import { rateLimit } from "express-rate-limit";
@@ -20,8 +21,9 @@ router.post("/inscription", authLimit, async (req, res, next) => {
     req.body && typeof req.body === "object" ? req.body : {};
   const nomUtilisateur =
     typeof body.nomUtilisateur === "string"
-      ? body.nomUtilisateur.trim().toLowerCase()
-      : "";
+      ? body.nomUtilisateur.trim().toLowerCase() ||
+        `joueur_${randomUUID().slice(0, 8)}`
+      : `joueur_${randomUUID().slice(0, 8)}`;
   const email =
     typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   const { mdp, mdp2 } = body;
@@ -33,7 +35,8 @@ router.post("/inscription", authLimit, async (req, res, next) => {
     erreurs.email = "Saisissez une adresse email valide.";
   if (typeof mdp !== "string" || mdp.length < 8 || Buffer.byteLength(mdp) > 72)
     erreurs.mdp = "Utilisez au moins 8 caractères et au maximum 72 octets.";
-  if (mdp !== mdp2) erreurs.mdp2 = "Les mots de passe ne correspondent pas.";
+  if (mdp2 !== undefined && mdp !== mdp2)
+    erreurs.mdp2 = "Les mots de passe ne correspondent pas.";
   if (typeof mdp !== "string" || Object.keys(erreurs).length)
     return res
       .status(422)

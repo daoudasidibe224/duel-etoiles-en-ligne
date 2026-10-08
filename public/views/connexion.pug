@@ -17,6 +17,7 @@ body
         .field
           label.label(for='mdp') Mot de passe
           input#mdp.input(type='password' name='mdp' required autocomplete='current-password')
+          button.password-toggle(type='button' data-password-toggle='mdp' aria-controls='mdp' aria-pressed='false') Afficher le mot de passe
         button.button.is-primary.is-fullwidth(type='submit') Entrer dans l’arcade →
       p.form-foot Vous découvrez le jeu ?
         | #{' '}

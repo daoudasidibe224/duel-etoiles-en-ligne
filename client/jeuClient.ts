@@ -5,10 +5,13 @@ import {
   scoreSchema,
   roundSchema,
   type Round,
+  type Star,
+  type Player,
   type ServerEvents,
   type ClientEvents,
   type PlayerState,
 } from "../shared/contracts";
+import { activeBonus, stageAt, STAGES } from "../shared/progression";
 import { element, canvasElement } from "./dom";
 const client: Socket<ServerEvents, ClientEvents> = io("/jeu", {
   transports: ["websocket"],
@@ -51,10 +54,12 @@ function playMusic() {
   }, 600);
 }
 class Runner {
+  frame = 0;
   score = 0;
+  bonus: Player["bonus"];
+  usedStages: number[] = [];
   x: number;
   y = 433;
-  frame = 0;
   state: PlayerState = {
     runningLeft: false,
     runningRight: false,
@@ -71,8 +76,9 @@ class Runner {
     this.x = x;
   }
   update(context: CanvasRenderingContext2D) {
-    if (this.state.runningRight) this.x = Math.min(915, this.x + 5);
-    else if (this.state.runningLeft) this.x = Math.max(0, this.x - 5);
+    const speed = activeBonus(this)?.kind === "sprint" ? 7.5 : 5;
+    if (this.state.runningRight) this.x = Math.min(915, this.x + speed);
+    else if (this.state.runningLeft) this.x = Math.max(0, this.x - speed);
     this.frame = (this.frame + 1) % 96;
     const moving = this.state.runningLeft || this.state.runningRight;
     const step = moving ? (Math.floor(this.frame / 12) % 2) * 3 : 0;
@@ -96,17 +102,17 @@ class Runner {
     context.restore();
   }
 }
-interface Star {
-  x: number;
-  y: number;
-  life: number;
-}
+const collecting = new Set<string>();
+const bonusRequests = new Map<
+  number,
+  { id: string; kind: "sprint" | "multiplier" }
+>();
+let bonusPending = false;
 const others = new Map<string, Runner>();
 let self: Runner | undefined,
   stars: Star[] = [],
   running = false,
   remaining = 90,
-  frame = 0,
   timer: ReturnType<typeof setInterval> | undefined,
   users = 0,
   playerId = "",
@@ -115,6 +121,32 @@ let self: Runner | undefined,
   animation: number | undefined,
   replaced = false;
 function updateHud() {
+  const phase = currentRound ? stageAt(currentRound) : 0;
+  const active = self && activeBonus(self);
+  element("stage-name").textContent =
+    `Étape ${phase + 1} / 3 · ${(STAGES[phase] ?? STAGES[0]).name}`;
+  element("stage-progress").setAttribute(
+    "value",
+    String(
+      currentRound
+        ? Math.min(90, (Date.now() - currentRound.startedAt) / 1000)
+        : 0,
+    ),
+  );
+  element("bonus-status").textContent = active
+    ? `${active.kind === "sprint" ? "Accélération" : "Points doublés"} · ${Math.max(0, Math.ceil((active.expiresAt - Date.now()) / 1000))} s`
+    : self?.usedStages.includes(phase)
+      ? "Charge utilisée. La prochaine étape recharge le bonus."
+      : "Une charge disponible pour cette étape.";
+  for (const id of ["bonus-sprint", "bonus-multiplier"]) {
+    const button = document.getElementById(id);
+    if (button instanceof HTMLButtonElement)
+      button.disabled =
+        !running ||
+        bonusPending ||
+        Boolean(active) ||
+        Boolean(self?.usedStages.includes(phase));
+  }
   const opponent = others.values().next().value;
   element("self-name").textContent = self?.name || "Vous";
   element("self-score").textContent = String(self?.score || 0);
@@ -200,12 +232,10 @@ function draw() {
   ctx.fillRect(0, 490, 960, 50);
   self?.update(ctx);
   for (const runner of others.values()) runner.update(ctx);
-  frame++;
-  if (frame % 150 === 0)
-    stars.push({ x: 20 + Math.random() * 920, y: 0, life: 60 });
-  stars = stars.filter((star) => {
-    if (star.y < 475) star.y += 2.5;
-    else star.life--;
+  for (const star of stars) {
+    if (collecting.has(star.id)) continue;
+    const y = ((Date.now() - star.bornAt) / 1000) * star.speed;
+    if (y > 535) continue;
     ctx.fillStyle = "#ffe94c";
     ctx.shadowColor = "#ffe94c";
     ctx.shadowBlur = 12;
@@ -213,7 +243,7 @@ function draw() {
     for (let i = 0; i < 10; i++) {
       const angle = (i * Math.PI) / 5 - Math.PI / 2,
         r = i % 2 ? 4 : 9;
-      ctx.lineTo(star.x + Math.cos(angle) * r, star.y + Math.sin(angle) * r);
+      ctx.lineTo(star.x + Math.cos(angle) * r, y + Math.sin(angle) * r);
     }
     ctx.closePath();
     ctx.fill();
@@ -222,21 +252,22 @@ function draw() {
       self &&
       star.x + 9 > self.x &&
       star.x - 9 < self.x + 45 &&
-      star.y + 9 > self.y &&
-      star.y - 9 < self.y + 57
+      y + 9 > self.y &&
+      y - 9 < self.y + 57
     ) {
-      self.score++;
-      updateHud();
-      client.emit("score", {
-        score: self.score,
-        roundId: currentRound?.id,
-        sequence: sequence++,
-      });
-      tone(880, 0.08);
-      return false;
+      collecting.add(star.id);
+      client
+        .timeout(5000)
+        .emit(
+          "score",
+          { starId: star.id, roundId: currentRound?.id, sequence: sequence++ },
+          (timeout: Error | null, error?: string) => {
+            if (!timeout && !error) tone(880, 0.08);
+            else if (timeout) collecting.delete(star.id);
+          },
+        );
     }
-    return star.life > 0;
-  });
+  }
   ctx.fillStyle = "#fff";
   ctx.font = "17px Arial";
   ctx.textAlign = "left";
@@ -290,6 +321,11 @@ client.on("roomData", (payload) => {
   const parsed = gameRoomSchema.safeParse(payload);
   if (!parsed.success) return;
   const players = parsed.data.utilisateurs;
+  if (parsed.data.round) {
+    stars = parsed.data.round.stars;
+    if (currentRound?.id === parsed.data.round.id)
+      currentRound = parsed.data.round;
+  }
   users = players.length;
   const count = document.querySelector(".nbJoueur"),
     host =
@@ -312,9 +348,11 @@ client.on("roomData", (payload) => {
         player.id,
         player.nomUtilisateur,
         player.userId === parsed.data.ownerId ? "#ffbf47" : "#bcf36e",
-        430,
+        player.userId === parsed.data.ownerId ? 430 : 530,
       );
       self.score = player.score;
+      self.bonus = player.bonus;
+      self.usedStages = player.usedStages;
     } else if (!others.has(player.id))
       others.set(
         player.id,
@@ -322,13 +360,16 @@ client.on("roomData", (payload) => {
           player.id,
           player.nomUtilisateur,
           player.userId === parsed.data.ownerId ? "#ffbf47" : "#bcf36e",
-          530,
+          player.userId === parsed.data.ownerId ? 430 : 530,
         ),
       );
   }
   for (const player of players) {
     const other = others.get(player.id);
-    if (other) other.score = player.score;
+    if (other) {
+      other.score = player.score;
+      other.bonus = player.bonus;
+    }
   }
   updateHud();
 });
@@ -344,11 +385,11 @@ client.on("init", (payload) => {
   stop();
   currentRound = parsed.data;
   remaining = Math.max(0, Math.ceil((currentRound.endsAt - Date.now()) / 1000));
-  stars = [];
-  frame = 0;
+  stars = parsed.data.stars;
   running = true;
   menu.style.display = "none";
   end.style.display = "none";
+  updateHud();
   status.textContent = "La partie a commencé.";
   playMusic();
   draw();
@@ -373,7 +414,7 @@ client.on("roundEnded", (payload) => {
           player.id,
           player.nomUtilisateur,
           player.userId === parsed.data.ownerId ? "#ffbf47" : "#bcf36e",
-          530,
+          player.userId === parsed.data.ownerId ? 430 : 530,
         ),
       );
     const runner = player.userId === playerId ? self : others.get(player.id);
@@ -502,3 +543,29 @@ window.addEventListener("pagehide", () => {
   stop();
   client.disconnect();
 });
+
+for (const kind of ["sprint", "multiplier"] as const)
+  element(`bonus-${kind}`).addEventListener("click", () => {
+    if (!currentRound || !running || bonusPending) return;
+    const stage = stageAt(currentRound);
+    let request = bonusRequests.get(stage);
+    if (!request || request.kind !== kind) {
+      request = { id: crypto.randomUUID(), kind };
+      bonusRequests.set(stage, request);
+    }
+    bonusPending = true;
+    updateHud();
+    client
+      .timeout(5000)
+      .emit(
+        "activateBonus",
+        { ...request, roundId: currentRound.id, stage },
+        (timeout: Error | null, error?: string) => {
+          bonusPending = false;
+          updateHud();
+          element("bonus-feedback").textContent = timeout
+            ? "Bonus non confirmé. Réessayez avec la connexion rétablie."
+            : error || "Bonus activé.";
+        },
+      );
+  });

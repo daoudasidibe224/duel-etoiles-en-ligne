@@ -138,3 +138,63 @@
     font-size: 0.85rem;
   }
 }
+
+.stage-hud {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 0;
+  color: var(--yellow);
+}
+.stage-hud p {
+  margin: 0;
+}
+.stage-hud progress {
+  width: 30%;
+  height: 0.65rem;
+  accent-color: var(--yellow);
+}
+.bonus-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1rem 0;
+}
+.bonus-controls p {
+  margin: 0;
+}
+.bonus-controls button {
+  font-size: 0.85rem;
+}
+.game-rules {
+  border-top: 1px solid var(--line);
+  padding: 1rem 0;
+}
+.game-rules summary {
+  cursor: pointer;
+  color: var(--yellow);
+}
+.game-rules p {
+  max-width: 80ch;
+}
+.bonus-controls button:disabled {
+  cursor: default;
+}
+@media (max-width: 600px) {
+  .stage-hud {
+    display: block;
+    font-size: 0.85rem;
+  }
+  .stage-hud progress {
+    width: 100%;
+  }
+  .bonus-controls .button {
+    flex: 1;
+    min-width: 120px;
+  }
+  .bonus-controls p {
+    width: 100%;
+  }
+}

@@ -1,10 +1,10 @@
 if typeof erreurs !== 'undefined'
-  .notification.is-warning(role='alert')
+  .notification.is-warning(role='alert' tabindex='-1' data-error-summary)
     each message in erreurs
       p= message
 if msg_succes && msg_succes.length
   .notification.is-success(role='status')= msg_succes.join(' ')
 if msg_erreur && msg_erreur.length
-  .notification.is-danger(role='alert')= msg_erreur.join(' ')
+  .notification.is-danger(role='alert' tabindex='-1' data-error-summary)= msg_erreur.join(' ')
 if error && error.length
-  .notification.is-danger(role='alert')= error.join(' ')
+  .notification.is-danger(role='alert' tabindex='-1' data-error-summary)= error.join(' ')

@@ -4,9 +4,12 @@ Un jeu d’arcade à deux joueurs, avec des salons en temps réel, une discussio
 
 ## Fonctionnalités
 
-- Inscription, connexion, déconnexion et modification du pseudo.
+- Inscription avec email et mot de passe, pseudo facultatif proposé automatiquement, visibilité du mot de passe et déconnexion qui révoque la session.
 - Salons limités à deux joueurs, mis à jour en direct.
 - Départ réservé au propriétaire, minuterie serveur et fermeture des salons abandonnés.
+- Trois étapes de 30 secondes : vitesse et fréquence des étoiles augmentent.
+- Une charge de bonus par étape : accélération de 50 % ou points doublés pendant 8 secondes.
+- Étoiles communes aux deux joueurs, distribuées par le serveur et consommées une seule fois.
 - Déplacement au clavier ou avec les commandes tactiles, invitation par lien et contrôle du son.
 - Discussion générale : liste des joueurs connectés, messages limités à 1 000 caractères et affichage sécurisé du texte.
 - Historique des 100 dernières parties, meilleur score et nombre de parties enregistrées.
@@ -48,13 +51,15 @@ Ouvrez [http://localhost:5000](http://localhost:5000). Créez deux comptes dans 
 | `npm run lint` | Vérifier le code TypeScript |
 | `npm run check` | Vérifier le lint, les types, la compilation et les tests |
 
-Les tests utilisent une vraie instance MongoDB temporaire via `mongodb-memory-server`. Le premier lancement télécharge le binaire MongoDB et nécessite un accès réseau. Ils vérifient les accès protégés, les formulaires, les comptes, les profils, l’unicité des places, les reconnexions, les départs répétés, les événements anciens ou désordonnés, les résultats uniques et la discussion sans doublon. Les parcours Chromium jouent une manche complète avec deux comptes, ouvrent des onglets du même compte et reprennent une partie après une coupure réseau suivie d’un rechargement. La CI exécute les contrôles et les parcours navigateur sous Node.js 22.
+Les tests utilisent une vraie instance MongoDB temporaire via `mongodb-memory-server`. Le premier lancement télécharge le binaire MongoDB et nécessite un accès réseau. Ils vérifient les accès protégés, les formulaires, les comptes, les profils, l’unicité des places, les reconnexions, les départs répétés, les événements anciens ou désordonnés, les résultats uniques, la progression, les étoiles partagées, les bonus rejoués après reprise et la discussion sans doublon. Les parcours Chromium jouent une manche complète avec deux comptes, ouvrent des onglets du même compte et reprennent une partie après une coupure réseau suivie d’un rechargement. La CI exécute les contrôles et les parcours navigateur sous Node.js 22.
 
 ## Règles de connexion et de manche
 
 Un compte occupe un seul salon et une seule place. Ouvrir la même partie dans un autre onglet transfère la connexion vers cet onglet ; l’ancien cesse de jouer. Un autre salon est refusé tant que le joueur n’a pas quitté le précédent. Le bouton « Quitter la partie » libère la place immédiatement ; le départ ou la déconnexion du compte propriétaire ferme le salon. Un départ met fin à la manche en cours et conserve les points déjà confirmés. Une coupure réserve la place pendant 12 secondes pour permettre la reprise. Au-delà, elle compte comme un départ.
 
-Le serveur crée un identifiant de manche, fixe sa fin à 90 secondes et accepte un seul départ. La reprise conserve cet identifiant, l’échéance et les scores confirmés. Les mouvements et les points portent un identifiant de manche et une séquence : les doublons, les anciennes séquences et les événements après la fin sont ignorés. Chaque point accepté augmente le score d’une unité. Les résultats sont enregistrés par le serveur pour les deux comptes, avec un index MongoDB unique par manche et joueur. Une nouvelle tentative ne crée pas une seconde ligne.
+Le serveur crée un identifiant de manche, fixe sa fin à 90 secondes et accepte un seul départ. La reprise conserve cet identifiant, l’échéance et les scores confirmés. Les mouvements et les points portent un identifiant de manche et une séquence : les doublons, les anciennes séquences et les événements après la fin sont ignorés. Chaque étoile identifiée rapporte un point, ou deux sous le bonus multiplicateur. Le serveur vérifie sa disponibilité et son instant de passage à hauteur du robot, puis la retire pour les deux joueurs. Les résultats sont enregistrés par le serveur pour les deux comptes, avec un index MongoDB unique par manche et joueur. Une nouvelle tentative ne crée pas une seconde ligne.
+
+Chaque étape offre une charge personnelle, utilisable une seule fois. Les bonus ne se cumulent pas et s’arrêtent après 8 secondes ou à la fin de la manche. Une charge inutilisée ne se reporte pas. Le serveur conserve les étapes consommées et l’échéance du bonus lors d’une reprise ; rejouer son identifiant n’ajoute ni charge ni durée.
 
 Les envois de discussion possèdent un identifiant. Réessayer un envoi conserve cet identifiant et évite un second message ; un index MongoDB unique par compte et identifiant empêche sa republication, y compris après une reconnexion. Les 50 derniers messages sont chargés à l’ouverture de la discussion. La présence dans la discussion compte les comptes distincts, même avec plusieurs onglets.
 
@@ -68,7 +73,7 @@ L’interface prend la forme d’une borne arcade : panneaux à angles coupés, 
 
 Les salons et les manches en cours restent en mémoire ; un redémarrage les efface. Les messages de discussion restent dans MongoDB. Les comptes, les sessions et les scores restent dans MongoDB. Si la sauvegarde d’un score échoue, la page affiche l’erreur et permet une nouvelle tentative tant que le salon reste ouvert ; aucun résultat n’est annoncé comme enregistré avant confirmation. Les manches non enregistrées ne sont pas récupérées après une fermeture du salon ou un redémarrage. Cette application convient à une seule instance de serveur. Elle n’utilise pas d’adaptateur Socket.IO partagé.
 
-Le moteur de jeu calcule les collisions et les scores dans le navigateur. Les événements et les valeurs sont contrôlés côté serveur, mais les résultats ne constituent pas un classement compétitif protégé contre la triche. Les étoiles sont générées localement par chaque joueur. Les personnages pixel et le décor sont dessinés par Canvas ; les sons utilisent des oscillateurs Web Audio. Les anciennes images et pistes audio aux droits non établis ont été retirées.
+Le navigateur calcule les déplacements et détecte les collisions. Le serveur génère les étoiles communes, leurs échéances, les bonus et les scores ; il refuse les ramassages anticipés, les étoiles absentes, les répétitions et les événements après la fin. Il ne vérifie pas la position horizontale du robot : un client modifié peut réclamer une étoile à portée temporelle sans être dessous. Les résultats ne constituent donc pas un classement compétitif protégé contre la triche. Les personnages pixel et le décor sont dessinés par Canvas ; les sons utilisent des oscillateurs Web Audio. Les anciennes images et pistes audio aux droits non établis ont été retirées.
 
 Les anciens scores sans identifiant de compte restent associés au pseudo historique. Si ce pseudo change, ils ne suivent pas le compte. Les nouveaux scores utilisent l’identifiant du joueur.
 

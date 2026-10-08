@@ -22,3 +22,19 @@ for (const button of document.querySelectorAll<HTMLButtonElement>(
     }
   });
 }
+
+for (const toggle of document.querySelectorAll<HTMLButtonElement>(
+  "[data-password-toggle]",
+)) {
+  const field = document.getElementById(toggle.dataset.passwordToggle || "");
+  if (!(field instanceof HTMLInputElement)) continue;
+  toggle.addEventListener("click", () => {
+    const visible = field.type === "password";
+    field.type = visible ? "text" : "password";
+    toggle.setAttribute("aria-pressed", String(visible));
+    toggle.textContent = visible
+      ? "Masquer le mot de passe"
+      : "Afficher le mot de passe";
+  });
+}
+document.querySelector<HTMLElement>("[data-error-summary]")?.focus();

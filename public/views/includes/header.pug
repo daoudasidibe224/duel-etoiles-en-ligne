@@ -1,5 +1,5 @@
 a.skip-link(href='#contenu') Aller au contenu
-nav.navbar(aria-label='Navigation principale')
+header.navbar.arcade-system
   .navbar-brand
     a.brand(href='/salon' aria-label='Duel d’étoiles en ligne, accueil')
       span.brand-icon(aria-hidden='true') ✦
@@ -8,17 +8,18 @@ nav.navbar(aria-label='Navigation principale')
       span(aria-hidden='true')
       span(aria-hidden='true')
       span(aria-hidden='true')
-  #navMenubd.navbar-menu
+  nav#navMenubd.navbar-menu(aria-label='Commandes de l’arcade')
     .navbar-start
       if utilisateur
-        a.navbar-item(href='/salon') Les salons
-        a.navbar-item(href='/stats') Mes scores
-    .navbar-end
-      if utilisateur
-        a.navbar-item(href='/profil')= utilisateur.nomUtilisateur
+        a.navbar-item(href='/salon') Salons de jeu
+        a.navbar-item(href='/salon/discussion&jeu') Discussion
+        a.navbar-item(href='/stats') Historique des scores
+      else
+        a.navbar-item(href='/connexion') Connexion
+        a.navbar-item(href='/inscription') Nouveau joueur
+    if utilisateur
+      .navbar-end
+        a.navbar-item(href='/profil') Profil · #{utilisateur.nomUtilisateur}
         form.navbar-item(action='/utilisateur/deconnexion' method='post')
           input(type='hidden' name='_csrf' value=csrfToken)
           button.button.is-outlined(type='submit') Déconnexion
-      else
-        a.navbar-item(href='/connexion') Connexion
-        a.navbar-item(href='/inscription') Créer un compte

@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
+import { Arena } from "../services/arena";
 import { saveRound } from "../services/results";
 import { socketUser, type GameNamespace, type GameSocket } from "../types";
 import {
   joinSchema,
+  bonusInputSchema,
   movementInputSchema,
   scoreInputSchema,
   resultSchema,
@@ -23,6 +25,7 @@ export default function game(
   rooms: Rooms,
   options: { durationMs?: number; reconnectMs?: number } = {},
 ) {
+  const arenas = new Map<string, Arena>();
   const members = new Map<string, Membership>();
   const participants = new Map<string, Player[]>();
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -52,6 +55,8 @@ export default function game(
       room.utilisateurs.map((player) => ({ ...player })),
     );
     round.ended = true;
+    arenas.get(room.id)?.stop();
+    arenas.delete(room.id);
     clearTimeout(timers.get(room.id));
     timers.delete(room.id);
     namespace.to(room.id).emit("roundEnded", resultSnapshot(room));
@@ -152,6 +157,7 @@ export default function game(
         nomUtilisateur: user.nomUtilisateur,
         room: room.id,
         score: 0,
+        usedStages: [],
       };
       members.set(user.id, {
         player,
@@ -207,7 +213,15 @@ export default function game(
         endsAt: room.startedAt + duration,
         ended: false,
         saved: false,
+        stars: [],
+        stage: 0,
       };
+      arenas.set(
+        room.id,
+        new Arena(room.round, room.utilisateurs, () =>
+          namespace.to(room.id).emit("roomData", snapshot(room)),
+        ),
+      );
       const timer = setTimeout(() => {
         void end(room);
       }, duration);
@@ -243,28 +257,62 @@ export default function game(
         .to(member.player.room)
         .emit("deplacementMonJoueur", { id: user.id, etat });
     });
-    socket.on("score", (payload) => {
+    socket.on("activateBonus", (payload, callback) => {
+      const parsed = bonusInputSchema.safeParse(payload),
+        member = active();
+      const arena = member && arenas.get(member.player.room);
+      if (!parsed.success || !arena)
+        return (
+          typeof callback === "function" &&
+          callback("Bonus invalide ou joueur absent.")
+        );
+      try {
+        arena.activate(user.id, parsed.data);
+        if (typeof callback === "function") callback();
+      } catch (error) {
+        if (typeof callback === "function")
+          callback(
+            error instanceof Error ? error.message : "Bonus indisponible.",
+          );
+      }
+    });
+    socket.on("score", (payload, callback) => {
       const parsed = scoreInputSchema.safeParse(payload),
         member = active();
-      const round = member && rooms[member.player.room]?.round;
+      const round = member && rooms[member.player.room]?.round,
+        arena = member && arenas.get(member.player.room);
+      const reply = (error?: string) => {
+        if (typeof callback === "function") {
+          if (error) callback(error);
+          else callback();
+        }
+      };
       if (
         !parsed.success ||
         !member ||
+        !arena ||
         !round ||
         round.ended ||
         round.endsAt <= Date.now() ||
         parsed.data.roundId !== round.id ||
-        parsed.data.sequence <= member.scoreSequence ||
-        parsed.data.score !== member.player.score + 1
+        parsed.data.sequence <= member.scoreSequence
       )
-        return;
-      member.scoreSequence = parsed.data.sequence;
-      member.player.score = parsed.data.score;
-      namespace.to(member.player.room).emit("score", {
-        id: user.id,
-        score: member.player.score,
-        roundId: round.id,
-      });
+        return reply("Événement invalide, ancien ou joueur absent.");
+      try {
+        const points = arena.collect(user.id, parsed.data.starId);
+        member.scoreSequence = parsed.data.sequence;
+        if (points)
+          namespace
+            .to(member.player.room)
+            .emit("score", {
+              id: user.id,
+              score: member.player.score,
+              roundId: round.id,
+            });
+        reply();
+      } catch (error) {
+        reply(error instanceof Error ? error.message : "Étoile indisponible.");
+      }
     });
     socket.on("scoreFinDeJeu", async (payload, callback) => {
       const parsed = resultSchema.safeParse(payload),
