@@ -1,110 +1,25 @@
-/* eslint-disable no-console */
-const path = require('path')
-const express = require('express')
-const passport = require('passport')
-const flash = require('connect-flash')
-const session = require('express-session')
-const bodyParser = require('body-parser')
-// const cors = require('cors')
-const mongoose = require('mongoose')
-
-const app = express()
-// const morgan = require('morgan')
 require('dotenv').config()
+const mongoose = require('mongoose')
+const MongoStore = require('connect-mongo').default
+const { createApp } = require('./src/app')
 
-// app.use(cors())
-
-// Dev Logginf Middleware
-if (process.env.NODE_ENV === 'development') {
-  // app.use(morgan('dev'))
+async function start() {
+  if (!process.env.MONGODB_URI) throw new Error('MONGODB_URI doit être configuré dans .env')
+  if (!process.env.SECRET || process.env.SECRET.length < 32) throw new Error('SECRET doit contenir au moins 32 caractères')
+  await mongoose.connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 10000 })
+  const store = MongoStore.create({ client: mongoose.connection.getClient(), collectionName: 'sessions' })
+  const { server, io } = createApp({ secret: process.env.SECRET, store })
+  server.listen(process.env.PORT || 5000, () => console.log(`Jeu disponible sur http://localhost:${process.env.PORT || 5000}`))
+  let closing = false
+  async function close() {
+    if (closing) return
+    closing = true
+    io.close()
+    await store.close()
+    await mongoose.disconnect()
+  }
+  process.on('SIGTERM', close)
+  process.on('SIGINT', close)
 }
-
-// ajout de socket.io
-const server = require('http').createServer(app)
-const io = require('socket.io')(server)
-
-app.io = io
-app.salons = {}
-require('./src/webSocket/indexSocket')({ io, salons: app.salons })
-require('./src/config/passport')(passport)
-
-// PUG
-app.set('views', path.join(__dirname, './public/views'))
-app.set('view engine', 'pug')
-
-// body parser
-app.use(bodyParser.urlencoded({ extended: true }))
-
-// Express session
-app.use(
-  session({
-    secret: process.env.SECRET,
-    cookie: { maxAge: 60000 },
-    resave: true,
-    saveUninitialized: true,
-  })
-)
-
-// Passport middleware
-app.use(passport.initialize())
-app.use(passport.session())
-
-// mes fichier
-app.use('/images', express.static(`${__dirname}/public/assets/images/`))
-app.use('/js', express.static(`${__dirname}/public/js/`))
-app.use('/sons', express.static(`${__dirname}/public/assets/sons/`))
-app.use('/sprites', express.static(`${__dirname}/public/assets/sprites/`))
-app.use('/tilesets', express.static(`${__dirname}/public/assets/tilesets/`))
-app.use('/styles', express.static(`${__dirname}/public/assets/styles/`))
-app.use('/vendor', express.static(`${__dirname}/public/assets/vendor/`))
-
-// Connect flash
-app.use(flash())
-
-// variables Globales
-app.use((req, res, next) => {
-  res.locals.msg_succes = req.flash('msg_succes')
-  res.locals.msg_erreur = req.flash('msg_erreur')
-  res.locals.error = req.flash('error')
-  next()
-})
-
-// Routes
-app.use('/', require('./src/routes/index.js'))
-app.use('/utilisateur', require('./src/routes/utilisateur.js'))
-app.use('/salon', require('./src/routes/salon.js'))
-
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    msg: 'Page non éxistante',
-  })
-})
-
-const PORT = process.env.PORT || 5000
-
-const connectionOptions = {
-  useNewUrlParser: true,
-  useCreateIndex: true,
-  useFindAndModify: false,
-  useUnifiedTopology: true,
-}
-
-const connectDB = async () => {
-  await mongoose
-    .connect(process.env.MONGODB_URI, connectionOptions)
-    .then(() => {
-      console.log('Connecté à MongoDB avec succèss :)')
-      server.listen(PORT, () => {
-        console.log(
-          `Le serveur a démarré sur le port ${PORT} => http://localhost:${PORT}`
-        )
-      })
-    })
-    .catch((e) => {
-      console.log('Erreur de connexion à MongoDB')
-      console.log(e)
-    })
-}
-
-connectDB()
+if (require.main === module) start().catch((error) => { console.error(error.message); process.exitCode = 1 })
+module.exports = { start }

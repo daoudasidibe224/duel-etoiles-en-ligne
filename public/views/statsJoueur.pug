@@ -1,16 +1,30 @@
 include includes/head.pug
-script.
-  window.lesScores = !{JSON.stringify(lesScores)}
-  window.meilleurScore = !{JSON.stringify(meilleurScore)}
 body
-
   include includes/header.pug
-
-  section.hero.is-primary
-    .title.has-text-white
-    .hero-body.formScore
-      #lesScores
-
-  script(src='/js/score.js')
-
+  main#contenu.page-shell
+    header.page-heading
+      p.eyebrow Votre tableau de scores
+      h1.title Mes parties
+    .score-summary
+      section.panel
+        p.muted Parties enregistrées
+        strong.metric= total
+      section.panel
+        p.muted Meilleur score
+        strong.metric= meilleurScore.length ? meilleurScore[0].monScore : '—'
+    if !lesScores.length
+      section.panel.empty-state
+        h2 Votre histoire commence ici.
+        p Lancez une partie pour enregistrer votre premier score.
+        a.button.is-primary(href='/salon') Trouver une partie →
+    else
+      p.muted Les 100 dernières parties sont affichées.
+      .score-list
+        each score in lesScores
+          article.panel.score-row
+            div
+              time(datetime=score.date.toISOString())= score.date.toLocaleString('fr-FR')
+              h2 #{score.monNom} / #{score.nomUtilisateurAutreJoueur}
+            strong #{score.monScore} : #{score.scoreAutreJoueur}
+            span.result-badge= score.monScore > score.scoreAutreJoueur ? 'Victoire' : score.monScore < score.scoreAutreJoueur ? 'Défaite' : 'Égalité'
   include includes/footer.pug

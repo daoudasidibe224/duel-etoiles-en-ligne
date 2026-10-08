@@ -1,36 +1,35 @@
 include includes/head.pug
-
 body
-  include ./includes/header.pug
-  section.hero.is-primary
-    .hero-body.formulaire
-      .title.has-text-white Connexion
-      .card
-        .card-content
-          .content
-            include ./includes/messages.pug
-            form(action='/utilisateur/connexion', method='POST')
-
-              .field
-                p.control.has-icons-left.has-icons-right
-                  input.input( name='email', id='email', placeholder="Entrer votre email")
-                  span.icon.is-small.is-left
-                    i.fas.fa-envelope
-              .field
-                p.control.has-icons-left
-                  input.input(type='password', name='mdp', id='mdp', placeholder='Entrer votre mot de passe')
-                  span.icon.is-small.is-left
-                    i.fas.fa-lock
-                .control
-                  button.button.is-primary Se connecter
-                br
-                p Pas de compte ? 
-                  a(href="/inscription") Inscrivez-vous maintenant !
-
+  include includes/header.pug
+  main#contenu.auth-layout
+    section.arcade-intro
+      p.eyebrow L’arcade à deux
+      h1.title Courez.
+        br
+        | Ramassez.
+        br
+        span Recommencez.
+      p.intro-text Retrouvez un ami, attrapez les étoiles et faites grimper votre score dans une partie de 90 secondes.
+      .arcade-scene(aria-hidden='true')
+        span.star.star-a ✦
+        span.star.star-b ✦
+        img(src='/images/M&L.jpg' alt='')
+        span.scene-floor
+      p.scene-caption Deux joueurs · Flèches ou commandes tactiles
+    section.auth-card(aria-labelledby='form-title')
+      p.eyebrow Prêt pour une partie ?
+      h2#form-title Connexion
+      p.muted Votre prochain record vous attend.
+      include includes/messages.pug
+      form(action='/utilisateur/connexion' method='post')
+        input(type='hidden' name='_csrf' value=csrfToken)
+        .field
+          label.label(for='email') Adresse email
+          input#email.input(type='email' name='email' required autocomplete='email' maxlength='254' placeholder='vous@exemple.fr')
+        .field
+          label.label(for='mdp') Mot de passe
+          input#mdp.input(type='password' name='mdp' required autocomplete='current-password')
+        button.button.is-primary.is-fullwidth(type='submit') Entrer dans l’arcade →
+      p.form-foot Vous découvrez le jeu ?
+        a(href='/inscription') Créer un compte
   include includes/footer.pug
-
-
-
-
-
-

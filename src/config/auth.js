@@ -7,7 +7,7 @@ module.exports = {
     }
 
     req.flash('msg_erreur', 'Veuillez vous connecter pour voir cette page')
-    res.redirect('/utilisateurs/login')
+    res.redirect('/connexion')
   },
   // Authentifié
   authentifie(req, res, next) {

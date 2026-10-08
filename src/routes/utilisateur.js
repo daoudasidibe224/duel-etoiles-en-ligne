@@ -1,134 +1,56 @@
-/* eslint-disable no-shadow */
-/* eslint-disable no-console */
 const express = require('express')
-
-const router = express.Router()
 const bcrypt = require('bcryptjs')
 const passport = require('passport')
-
-//  Utilisateur model
+const { rateLimit } = require('express-rate-limit')
 const Utilisateur = require('../models/Utilisateur')
-
 const { assurerAuthentification } = require('../config/auth')
-
-// post inscription
-router.post('/inscription', (req, res, next) => {
-  const { nomUtilisateur, email, mdp, mdp2 } = req.body
-
+const router = express.Router()
+const authLimit = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: 'draft-8', legacyHeaders: false, message: 'Trop de tentatives. Réessayez dans quelques minutes.' })
+const validName = (value) => typeof value === 'string' && /^[a-z0-9_-]{3,24}$/i.test(value.trim())
+router.post('/inscription', authLimit, async (req, res, next) => {
+  const body = req.body || {}
+  const nomUtilisateur = typeof body.nomUtilisateur === 'string' ? body.nomUtilisateur.trim().toLowerCase() : ''
+  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
+  const { mdp, mdp2 } = body
   const erreurs = {}
-
-  if (!nomUtilisateur || !email || !mdp || !mdp2) {
-    erreurs.champsVides = 'Veuillez entrer tous les champs'
-  } else {
-    if (mdp !== mdp2) {
-      erreurs.mdpDifferent = 'Les mots de passe ne correspondent pas'
-    }
-
-    if (mdp.length < 6) {
-      erreurs.longueurMdp = 'Le mot de passe doit être au moins de 6 caractères'
-    }
-  }
-
-  if (Object.keys(erreurs).length > 0) {
-    res.render('inscription', {
-      erreurs,
-      nomUtilisateur,
-      email,
-      mdp,
-      mdp2,
-    })
-  } else {
-    Utilisateur.findOne({
-      $or: [
-        {
-          email,
-        },
-        {
-          nomUtilisateur,
-        },
-      ],
-    }).then((utilisateur) => {
-      if (utilisateur) {
-        if (utilisateur.nomUtilisateur === nomUtilisateur) {
-          erreurs.nomUtilisateur = "Nom d'utilisateur déja éxistant"
-        }
-        if (utilisateur.email === email) {
-          erreurs.email = "L'email existe déjà"
-        }
-        res.render('inscription', {
-          erreurs,
-          nomUtilisateur,
-          email,
-          mdp,
-          mdp2,
-        })
-      } else {
-        const newUser = new Utilisateur({
-          nomUtilisateur,
-          email,
-          mdp,
-        })
-
-        bcrypt.genSalt(10, (erreur, salt) => {
-          bcrypt.hash(newUser.mdp, salt, (erreur, hash) => {
-            if (erreur) throw erreur
-            newUser.mdp = hash
-            newUser
-              .save()
-              .then((utilisateur) => {
-                req.login(utilisateur, (erreur) => {
-                  if (erreur) {
-                    return next(erreur)
-                  }
-                  return res.redirect('/salon')
-                })
-              })
-              .catch((erreur) => console.log(erreur))
-          })
-        })
-      }
-    })
+  if (!validName(nomUtilisateur)) erreurs.nomUtilisateur = 'Choisissez un pseudo de 3 à 24 lettres, chiffres, tirets ou tirets bas.'
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) erreurs.email = 'Saisissez une adresse email valide.'
+  if (typeof mdp !== 'string' || mdp.length < 8 || Buffer.byteLength(mdp) > 72) erreurs.mdp = 'Utilisez au moins 8 caractères et au maximum 72 octets.'
+  if (mdp !== mdp2) erreurs.mdp2 = 'Les mots de passe ne correspondent pas.'
+  if (Object.keys(erreurs).length) return res.status(422).render('inscription', { erreurs, nomUtilisateur, email })
+  try {
+    if (await Utilisateur.exists({ $or: [{ email }, { nomUtilisateur }] })) return res.status(409).render('inscription', { erreurs: { compte: 'Cet email ou ce pseudo est déjà utilisé.' }, nomUtilisateur, email })
+    const utilisateur = await Utilisateur.create({ nomUtilisateur, email, mdp: await bcrypt.hash(mdp, 12) })
+    req.login(utilisateur, (error) => error ? next(error) : res.redirect('/salon'))
+  } catch (error) {
+    if (error.code === 11000) return res.status(409).render('inscription', { erreurs: { compte: 'Cet email ou ce pseudo est déjà utilisé.' }, nomUtilisateur, email })
+    next(error)
   }
 })
-
-// modifier le profil
-router.post('/editer-profil', assurerAuthentification, (req, res) => {
-  const { idUtilisateur, nouveauNomUtilisateur } = req.body
-  const opts = { runValidators: true, context: 'query' }
-
-  Utilisateur.findOneAndUpdate(
-    { _id: idUtilisateur },
-    { nomUtilisateur: nouveauNomUtilisateur },
-    opts,
-    (err, doc) => {
-      // console.log('doc', doc)
-      if (!err) {
-        req.flash('msg_succes', 'Modification réussie')
-      } else {
-        req.flash('msg_erreur', " Ce nom d'utilisateur est déjà pris")
-        console.log(`Erreur lors de la mise à jour : ${err}`)
-      }
-
-      res.redirect('/profil')
-    }
-  )
+router.post('/editer-profil', assurerAuthentification, async (req, res, next) => {
+  const nomUtilisateur = req.body?.nouveauNomUtilisateur
+  if (!validName(nomUtilisateur)) { req.flash('msg_erreur', 'Le pseudo doit contenir de 3 à 24 lettres, chiffres, tirets ou tirets bas.'); return res.redirect('/profil') }
+  try {
+    // L'identité vient de la session, jamais d'un champ du formulaire.
+    await Utilisateur.findByIdAndUpdate(req.user.id, { nomUtilisateur: nomUtilisateur.trim().toLowerCase() }, { runValidators: true })
+    req.flash('msg_succes', 'Votre pseudo a été modifié.')
+    res.redirect('/profil')
+  } catch (error) {
+    if (error.code === 11000) { req.flash('msg_erreur', 'Ce pseudo est déjà pris.'); return res.redirect('/profil') }
+    next(error)
+  }
 })
-
-// Login
-router.post('/connexion', (req, res, next) => {
-  passport.authenticate('local', {
-    successRedirect: '/salon',
-    failureRedirect: '/connexion',
-    badRequestMessage: 'Veuillez entrer tous les champs',
-    failureFlash: true,
-  })(req, res, next)
+router.post('/connexion', authLimit, (req, res, next) => {
+  if (typeof req.body?.email !== 'string' || typeof req.body?.mdp !== 'string') return res.status(422).send('Saisissez un email et un mot de passe.')
+  passport.authenticate('local', { successRedirect: '/salon', failureRedirect: '/connexion', badRequestMessage: 'Veuillez remplir tous les champs.', failureFlash: true })(req, res, next)
 })
-
-// Déconnexion
-router.get('/deconnexion', (req, res) => {
-  req.logout()
-  req.flash('msg_succes', 'Vous êtes déconnecté')
-  res.redirect('/connexion')
+router.post('/deconnexion', (req, res, next) => {
+  for (const namespace of req.app.io._nsps.values()) {
+    for (const socket of namespace.sockets.values()) if (socket.request.sessionID === req.sessionID) socket.disconnect(true)
+  }
+  req.logout((error) => {
+  if (error) return next(error)
+  req.session.destroy((err) => err ? next(err) : res.redirect('/connexion'))
+  })
 })
-
 module.exports = router

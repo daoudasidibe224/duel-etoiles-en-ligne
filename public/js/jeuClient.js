@@ -3,10 +3,10 @@
 /* eslint-disable no-undef */
 /* eslint-disable no-plusplus */
 /* eslint-disable no-use-before-define */
-const salonClient = io.connect(window.location.hostname, {
+const salonClient = io.connect(window.location.origin, {
   transports: ['websocket'],
 })
-const jeuClient = io.connect(`${window.location.hostname}/jeu`, {
+const jeuClient = io.connect(`${window.location.origin}/jeu`, {
   transports: ['websocket'],
 })
 
@@ -24,6 +24,8 @@ const sonDepart = new Audio('/sons/Forest Maze.ogg')
 const sonJeu = new Audio('/sons/Heat.ogg')
 const sonGameOver = new Audio('/sons/Death 1.ogg')
 const sonCollisionEtoile = new Audio('/sons/Sound-006.wav')
+const sons = [sonDepart, sonJeu, sonGameOver, sonCollisionEtoile]
+sons.forEach((son) => { son.muted = true })
 const SpriteMario = new Image()
 const SpriteLuigi = new Image()
 SpriteMario.src = '/sprites/mario.png'
@@ -42,7 +44,11 @@ let monSprite = null
 const tousLesSpriteDeAutresJoueurs = {}
 let tousLesUtilsateurs // pour verifier si quelqu'un quitte la partie deja lancé
 
-jeuClient.emit('join', { nomUtilisateur, room })
+jeuClient.on('connect', () => {
+  jeuClient.emit('join', { room }, (error) => { if (error) { document.getElementById('game-status').textContent = error; btnDepart.classList.add('cacher') } })
+})
+jeuClient.on('connect_error', () => { document.getElementById('game-status').textContent = 'Connexion impossible. Rechargez la page.' })
+jeuClient.on('disconnect', () => { document.getElementById('game-status').textContent = 'Connexion interrompue. Revenez aux salons pour rejouer.'; verifAnim = false; clearInterval(setCompteArebours) })
 
 jeuClient.on('roomData', ({ room, utilisateurs, salons }) => {
   tousLesUtilsateurs = utilisateurs
@@ -59,21 +65,18 @@ jeuClient.on('roomData', ({ room, utilisateurs, salons }) => {
     En attente que ${utilisateurs[0].nomUtilisateur} lance la partie`
   }
 
+  if (!utilisateurs.length) { document.getElementById('game-status').textContent = 'Le salon est fermé.'; return }
   jeuClient.emit('afficherBtnPlay', utilisateurs[0].id)
 
-  jeuClient.on('afficherBtnPlay', (idJoueur1) => {
-    if (utilisateurs[0].id === idJoueur1 && utilisateurs.length >= 2) {
-      btnDepart.classList.remove('cacher')
-      paragrapheNbJoueur.innerText = ` Joueur:  ${utilisateurs.length}/2
-      ${utilisateurs[1].nomUtilisateur} attend votre départ`
-    }
-  })
+  btnDepart.classList.toggle('cacher', utilisateurs.length !== 2 || utilisateurs[0].id !== jeuClient.id)
 
+  for (const id of Object.keys(tousLesSpriteDeAutresJoueurs)) if (!utilisateurs.some((user) => user.id === id)) delete tousLesSpriteDeAutresJoueurs[id]
   utilisateurs.forEach((unJoueur) => {
     if (
       unJoueur.nomUtilisateur.trim().toLowerCase() ===
       nomUtilisateur.trim().toLowerCase()
     ) {
+      if (monSprite) return
       monSprite = new Joueur(
         unJoueur.id,
         unJoueur.nomUtilisateur,
@@ -84,6 +87,7 @@ jeuClient.on('roomData', ({ room, utilisateurs, salons }) => {
         0
       )
     } else {
+      if (tousLesSpriteDeAutresJoueurs[unJoueur.id]) return
       tousLesSpriteDeAutresJoueurs[unJoueur.id] = new Joueur(
         unJoueur.id,
         unJoueur.nomUtilisateur,
@@ -119,7 +123,7 @@ function init() {
   setCompteArebours = setInterval(compteurMaj, 1000)
   sonDepart.pause()
   sonDepart.currentTime = 0
-  sonJeu.play()
+  sonJeu.play().catch(() => {})
   sonJeu.loop = true
   menuDepart.style.display = 'none'
   document.addEventListener('keydown', keyDown, false)
@@ -134,7 +138,7 @@ function animate() {
       sonJeu.currentTime = 0
       verifAnim = false
       clearInterval(setCompteArebours)
-      sonGameOver.play()
+      sonGameOver.play().catch(() => {})
       sonGameOver.loop = false
       alert('Le joueur a quitté la partie :(')
       location.href = `/salon`
@@ -182,7 +186,7 @@ function animate() {
         etoile.y - etoile.radius < monSprite.y + monSprite.scaledFrameHeight &&
         etoile.y + etoile.radius > monSprite.y
       ) {
-        sonCollisionEtoile.play()
+        sonCollisionEtoile.play().catch(() => {})
         sonCollisionEtoile.currentTime = 0
         // Destruction Etoile
         etoiles.splice(index, 1)
@@ -191,7 +195,7 @@ function animate() {
         if (monSprite) {
           monSprite.scoreUpdate()
           console.log('Mon score', monSprite.score)
-          jeuClient.emit('score', monSprite)
+          jeuClient.emit('score', { score: monSprite.score })
         }
 
         if (tousLesSpriteDeAutresJoueurs) {
@@ -339,17 +343,19 @@ jeuClient.on('deplacementMonJoueur', (leSprite) => {
 
 // quand le monSprite appui sur la fleche gauche ou droite
 function keyDown(e) {
+  if ([37, 39].includes(e.keyCode) && e.preventDefault) e.preventDefault()
   if (monSprite) {
     if (e.keyCode === 39) {
       monSprite.etat.runningRight = true
     } else if (e.keyCode === 37) {
       monSprite.etat.runningLeft = true
     }
-    jeuClient.emit('deplacementMonJoueur', monSprite)
+    jeuClient.emit('deplacementMonJoueur', { etat: monSprite.etat })
   }
 }
 // quand le monSprite relache la fleche gauche ou droite
 function keyUp(e) {
+  if ([37, 39].includes(e.keyCode) && e.preventDefault) e.preventDefault()
   if (monSprite) {
     if (e.keyCode === 39) {
       monSprite.etat.runningRight = false
@@ -360,7 +366,7 @@ function keyUp(e) {
       monSprite.etat.idRight = false
       monSprite.etat.idLeft = true
     }
-    jeuClient.emit('deplacementMonJoueur', monSprite)
+    jeuClient.emit('deplacementMonJoueur', { etat: monSprite.etat })
   }
 }
 
@@ -378,13 +384,10 @@ window.addEventListener(
   'load',
   () => {
     reDimensionnerLeJeu()
-    sonDepart.play()
+    sonDepart.play().catch(() => {})
     sonDepart.loop = true
-    // Laisse le chargement s'exécuter pendant 1,5s, sinon, il se charge trop rapidement
-    setTimeout(() => {
-      chargement.style.display = 'none'
-      airDeJeu.style.display = 'block'
-    }, 1500)
+    chargement.style.display = 'none'
+    airDeJeu.style.display = 'block'
   },
   false
 )
@@ -393,28 +396,31 @@ window.addEventListener('resize', reDimensionnerLeJeu, false)
 
 // echelle du canvas pour s'adapter à la fenêtre (16:9 ratio)
 function reDimensionnerLeJeu() {
-  const largeurAhauteur = 16 / 9
-  let newLargeur = window.innerWidth
-  let newHauteur = window.innerHeight - 150
-  const newlargeurAhauteur = newLargeur / newHauteur
-
-  if (newlargeurAhauteur > largeurAhauteur) {
-    newLargeur = newHauteur * largeurAhauteur
-    airDeJeu.style.height = `${newHauteur}px`
-    airDeJeu.style.width = `${newLargeur}px`
-  } else {
-    newHauteur = newLargeur / largeurAhauteur
-    airDeJeu.style.width = `${newLargeur}px`
-    airDeJeu.style.height = `${newHauteur}px`
-  }
-
-  airDeJeu.style.marginTop = `${-newHauteur / 2}px`
-  airDeJeu.style.marginLeft = `${-newLargeur / 2}px`
-
-  canvas.width = newLargeur
-  canvas.height = newHauteur
+  canvas.width = 960
+  canvas.height = 540
 }
 
 function idEtoile() {
   return `${Math.random().toString(36).substr(2, 9)}`
 }
+
+for (const [id, code] of [['move-left', 37], ['move-right', 39]]) {
+  const button = document.getElementById(id)
+  button.addEventListener('pointerdown', (event) => { event.preventDefault(); button.setPointerCapture(event.pointerId); keyDown({ keyCode: code }) })
+  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) button.addEventListener(type, () => keyUp({ keyCode: code }))
+}
+window.addEventListener('blur', () => { keyUp({ keyCode: 37 }); keyUp({ keyCode: 39 }) })
+
+const soundToggle = document.getElementById('sound-toggle')
+soundToggle.addEventListener('click', () => {
+  const enabled = soundToggle.getAttribute('aria-pressed') !== 'true'
+  soundToggle.setAttribute('aria-pressed', String(enabled))
+  soundToggle.textContent = enabled ? 'Couper le son' : 'Activer le son'
+  sons.forEach((son) => { son.muted = !enabled })
+  if (enabled) (verifAnim ? sonJeu : sonDepart).play().catch(() => {})
+})
+document.getElementById('share-room').addEventListener('click', async () => {
+  const status = document.getElementById('game-status')
+  try { await navigator.clipboard.writeText(location.href); status.textContent = 'Invitation copiée. Envoyez ce lien au second joueur.' }
+  catch { status.textContent = `Copiez ce lien pour inviter un ami : ${location.href}` }
+})

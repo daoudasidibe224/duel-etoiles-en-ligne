@@ -1,0 +1,9 @@
+include includes/head.pug
+body
+  include includes/header.pug
+  main#contenu.page-shell.narrow
+    section.panel.empty-state
+      h1.title= titre
+      p= message
+      a.button.is-primary(href='/salon') Retour aux salons
+  include includes/footer.pug

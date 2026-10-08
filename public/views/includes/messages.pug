@@ -1,23 +1,10 @@
-if typeof erreurs != 'undefined'
-  div(class="notification is-warning")
-    button(class="delete is-small")
-    each error, key in erreurs
-      p(id="#{key}") #{error}
-
-if msg_succes != ''
-  div(class="notification is-primary")
-    button(class="delete")
-    p #{msg_succes}
-
-
-if msg_erreur != ''
-  div(class="notification is-danger is-small")
-    button(class="delete")
-    p #{msg_erreur}
-
-
-if error != ''
-  div(class="notification is-danger is-small")
-    button(class="delete")
-    p #{error}
-
+if typeof erreurs !== 'undefined'
+  .notification.is-warning(role='alert')
+    each message in erreurs
+      p= message
+if msg_succes && msg_succes.length
+  .notification.is-success(role='status')= msg_succes.join(' ')
+if msg_erreur && msg_erreur.length
+  .notification.is-danger(role='alert')= msg_erreur.join(' ')
+if error && error.length
+  .notification.is-danger(role='alert')= error.join(' ')

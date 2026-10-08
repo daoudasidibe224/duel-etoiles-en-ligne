@@ -1,42 +1,24 @@
-nav.navbar
+a.skip-link(href='#contenu') Aller au contenu
+nav.navbar(aria-label='Navigation principale')
   .navbar-brand
-    a(href='/')
-      img(src='/images/M&L.jpg')
-    .navbar-burger.burger(data-target='navMenubd')
-      span
-      span
-      span
+    a.brand(href='/salon' aria-label='Run Run Run, accueil')
+      span.brand-icon(aria-hidden='true') R
+      span RUN RUN RUN
+    button.navbar-burger(type='button' data-target='navMenubd' aria-controls='navMenubd' aria-expanded='false' aria-label='Ouvrir le menu')
+      span(aria-hidden='true')
+      span(aria-hidden='true')
+      span(aria-hidden='true')
   #navMenubd.navbar-menu
     .navbar-start
       if utilisateur
-        .navbar-item
-          a.navbar-item(href='/salon') Salon
-        .navbar-item
-          a.navbar-item(href='/stats') Stats de jeu
-        //- .navbar-item
-        //-   a.navbar-item(href='#') Notification
+        a.navbar-item(href='/salon') Les salons
+        a.navbar-item(href='/stats') Mes scores
     .navbar-end
-      .navbar-item
-        .field.is-grouped
-          if !utilisateur 
-            p.control
-              a.button.is-info(href="/connexion")
-                span.icon
-                  i.fas.fa-sign-in-alt
-                span Connexion
-            p.control
-              a.button.is-primary(href='/inscription')
-                span.icon
-                  i.fas.fa-user-plus
-                span Inscription
-          else
-            p.control
-              a.button(href="/profil")
-                span.icon
-                  i.fas.fa-user-circle
-                span Profil
-            p.control
-              a.button.is-primary(href='/utilisateur/deconnexion')
-                span.icon
-                  i.fas.fa-sign-out-alt
-                span Déconnexion
+      if utilisateur
+        a.navbar-item(href='/profil')= utilisateur.nomUtilisateur
+        form.navbar-item(action='/utilisateur/deconnexion' method='post')
+          input(type='hidden' name='_csrf' value=csrfToken)
+          button.button.is-outlined(type='submit') Déconnexion
+      else
+        a.navbar-item(href='/connexion') Connexion
+        a.navbar-item(href='/inscription') Créer un compte

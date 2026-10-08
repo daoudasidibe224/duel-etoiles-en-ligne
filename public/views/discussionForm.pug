@@ -1,36 +1,23 @@
 include includes/head.pug
 body
   include includes/header.pug
-  section.hero
-      .hero-body
-        nav.tabs.is-boxed
-          .container
-            ul
-              li.tab.is-active(onclick="openTab(event,'discussion')")
-                a Discussion
-              li.tab.tabMobile(onclick="openTab(event,'enLigneMobile')")
-                a En ligne
-              li.tab 
-                a(href='/salon') 🚪
-        .box.container(style='background-color: #fff; margin-top:-25px;')
-          #discussion.content-tab
-            .columns.is-gapless
-              .column.is-2
-                .title.is-5 En Ligne
-                #listeUtilisateurs.nomCapital
-              .column.customResponsive
-                .chatBox
-                form.form(id="envoyerMessage")
-                  .field.has-addons
-                    .control.is-expanded
-                      input.input.has-fixed-size(placeholder='Écrivez quelque chose' required)
-                    .control
-                      button.button.is-primary
-                        i.fa.fa-paper-plane(aria-hidden='true')
-          #enLigneMobile.content-tab(style='display:none')
-            #listeUsersMobile.nomCapital
-  script(src='https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.22.2/moment.min.js')
-  script(src='https://cdnjs.cloudflare.com/ajax/libs/qs/6.6.0/qs.min.js')
-  script(type='text/javascript' src='/socket.io/socket.io.js')
-  script(src='/js/discussionClient.js')
+  main#contenu.page-shell
+    header.page-heading
+      p.eyebrow Entre deux parties
+      h1.title Le salon de discussion
+      a(href='/salon') ← Retour aux parties
+    .chat-layout.panel
+      aside
+        h2 En ligne
+        #listeUtilisateurs.nomCapital
+      section.chat-main(aria-label='Discussion générale')
+        .chatBox(role='log' aria-live='polite' aria-label='Messages')
+        p#chat-status.muted(role='status') Connexion…
+        form#envoyerMessage.form
+          label.label(for='message') Votre message
+          .message-compose
+            input#message.input(name='message' placeholder='Écrivez un message…' required maxlength='1000' autocomplete='off')
+            button.button.is-primary(type='submit') Envoyer
+  script(src='/socket.io/socket.io.js')
+  script(src='/js/discussionClient.js' defer)
   include includes/footer.pug

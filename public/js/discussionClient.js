@@ -1,117 +1,44 @@
-/* eslint-disable no-undef */
-/* eslint-disable no-param-reassign */
-/* eslint-disable prefer-const */
-/* eslint-disable no-unused-vars */
-/* eslint-disable no-plusplus */
-
-const discussionClient = io.connect(`${window.location.hostname}/discussion`, {
-  transports: ['websocket'],
-})
-// const jeuClient = io('http://localhost:5000/jeu')
-
-const { nomUtilisateur, room } = Qs.parse(location.search, {
-  ignoreQueryPrefix: true,
-})
-
-// ---------------------------------------------- chat ---------------------------------------------
-
-// Quand l'utilisateur clique dur le bouton pour rejoindre le salon
-discussionClient.emit('join', { nomUtilisateur, room }, (error) => {
-  if (error) {
-    alert(error)
-    location.href = '/salon'
-  }
-})
-
-// Une fois que l'utilisateur rejoint le salon
+const discussionClient = io('/discussion')
+const status = document.getElementById('chat-status')
+const form = document.getElementById('envoyerMessage')
+const input = document.getElementById('message')
+const button = form.querySelector('button')
+discussionClient.on('connect', () => { status.textContent = 'Vous êtes en ligne.'; discussionClient.emit('join', {}, () => {}) })
+discussionClient.on('disconnect', () => { status.textContent = 'Connexion interrompue. Vos messages ne sont pas envoyés.' })
+discussionClient.on('connect_error', () => { status.textContent = 'Connexion impossible. Rechargez la page.' })
 discussionClient.on('roomData', ({ utilisateurs }) => {
-  const listeUtilisateurs = document.querySelector('#listeUtilisateurs')
-  const listeUsersMobile = document.querySelector('#listeUsersMobile')
-  listeUtilisateurs.innerHTML = ''
-  listeUsersMobile.innerHTML = ''
-
-  // parcourir les uilisateurs pour les affichers dans la liste
-  for (let i = 0; i < utilisateurs.length; i++) {
-    const p = document.createElement('p')
-    const p2 = document.createElement('p')
-    const utilisateur = `${utilisateurs[i].nomUtilisateur}`
-    p.innerHTML = `${utilisateur}  <span><img src="/images/onlineIcon.png", alt="icon en ligne" /></span>`
-    p2.innerHTML = `${utilisateur}  <span><img src="/images/onlineIcon.png", alt="icon en ligne" /></span>`
-    listeUtilisateurs.appendChild(p)
-    listeUsersMobile.appendChild(p2)
+  const list = document.getElementById('listeUtilisateurs')
+  list.replaceChildren()
+  for (const user of utilisateurs) {
+    const row = document.createElement('p')
+    row.textContent = user.nomUtilisateur
+    list.append(row)
   }
 })
-
-// Quand un message est envoyé dans le salon
 discussionClient.on('message', (message) => {
-  const donnees = {
-    msgNomUtilisateur: message.nomUtilisateur,
-    message: message.text,
-    heureDenvoi: moment(message.heureDenvoi).format('HH:mm '),
-  }
-
-  const chatBox = document.querySelector('.chatBox')
-  const messageContainer = document.createElement('div')
-  const messageBox = document.createElement('div')
-  const infosMessages = document.createElement('p')
-  const messagesText = document.createElement('p')
-  let utilisateurActuel = false
-
-  if (donnees.msgNomUtilisateur === nomUtilisateur.trim().toLowerCase()) {
-    utilisateurActuel = true
-  }
-
-  if (!utilisateurActuel) {
-    messageContainer.classList.add('messageContainer', 'justifyStart')
-    infosMessages.classList.add('infosMessages', 'pl-10')
-    messageBox.classList.add('messageBox', 'backgroundSecondary')
-    messagesText.classList.add('messageText')
-    messagesText.innerHTML = donnees.message
-    infosMessages.innerHTML = ` ${donnees.msgNomUtilisateur}: ${donnees.heureDenvoi} `
-    messageBox.appendChild(messagesText)
-    messageContainer.appendChild(messageBox)
-    messageContainer.appendChild(infosMessages)
-    chatBox.appendChild(messageContainer)
-  } else {
-    messageContainer.classList.add('messageContainer', 'justifyEnd')
-    infosMessages.classList.add('infosMessages', 'pr-10')
-    messageBox.classList.add('messageBox', 'backgroundPrimary')
-    messagesText.classList.add('messageText')
-    messagesText.innerHTML = donnees.message
-    infosMessages.innerHTML = ` ${donnees.msgNomUtilisateur}: ${donnees.heureDenvoi} `
-    messageBox.appendChild(messagesText)
-    messageContainer.appendChild(infosMessages)
-    messageContainer.appendChild(messageBox)
-    chatBox.appendChild(messageContainer)
-  }
-
-  chatBox.scrollTop = chatBox.scrollHeight
+  const chat = document.querySelector('.chatBox')
+  const row = document.createElement('article')
+  row.className = 'chat-message'
+  const info = document.createElement('p')
+  info.className = 'chat-meta'
+  info.textContent = `${message.nomUtilisateur} · ${new Date(message.heureDenvoi).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`
+  const text = document.createElement('p')
+  text.textContent = message.text
+  row.append(info, text)
+  chat.append(row)
+  // La discussion reste légère pendant les longues sessions.
+  while (chat.children.length > 200) chat.firstChild.remove()
+  chat.scrollTop = chat.scrollHeight
 })
-
-// Redimenssioner le chatBox pour le responsive
-window.addEventListener('resize', () => {
-  let column = document.querySelector('.customResponsive')
-  if (window.innerWidth >= 1023) {
-    column.classList.remove('is-12', 'is-mobile')
-    column.classList.add('is-10', 'is-desktop')
-  } else {
-    column.classList.remove('is-10', 'is-desktop')
-    column.classList.add('is-12', 'is-mobile')
-  }
-})
-// Envoi d'un message => evenement submit du formulaire de message
-const messageForm = document.querySelector('#envoyerMessage')
-const contenuMessage = document.querySelector('#envoyerMessage input')
-messageForm.addEventListener('submit', (e) => {
-  e.preventDefault()
-  const message = contenuMessage.value
-
-  discussionClient.emit('envoyerMessage', message, (error) => {
-    contenuMessage.value = ''
-    if (error) {
-      return console.log(error)
-    }
+form.addEventListener('submit', (event) => {
+  event.preventDefault()
+  if (!discussionClient.connected || !input.value.trim()) return
+  button.disabled = true
+  discussionClient.timeout(5000).emit('envoyerMessage', input.value, (timeout, error) => {
+    button.disabled = false
+    if (timeout || error) { status.textContent = error || 'Le message n’a pas été envoyé. Réessayez.'; return }
+    input.value = ''
+    status.textContent = 'Message envoyé.'
+    input.focus()
   })
 })
-
-// ---------------------------------------------- jeu ---------------------------------------------

@@ -1,30 +1,32 @@
-//- utilisateur pug dans un zutre fichier js !{}
 include includes/head.pug
-script.
-  window.salons = !{JSON.stringify(salons)}
-  window.nomUtilisateur = !{JSON.stringify(utilisateur.nomUtilisateur)}
 body
   include includes/header.pug
-  section.hero.is-primary
-    .hero-body.formSalon
-      .columns
-        .card
-          .card-header
-            p.card-header-title.is-centered Discussion & jeu       
-          .card-content            
-            .content.monContenu
-              .partieDisponible
-            form.lancerJeuForm(action="/salon/salonDeJeu/room" method="POST")
-              .field.has-addons.has-addons-centered
-                input.gameRoom(type="hidden" name="room" id="room")
-                p.control
-                  button.button.is-primary.is-outlined.is-light Lancer une partie
-            br
-            form.lancerDiscussion(action="/salon/discussion&jeu")
-                input(type="hidden" name="nomUtilisateur" value=utilisateur.nomUtilisateur)
-                input(type="hidden" name="room" value="discutionGénérale")
-                button.button.is-primary Salon de discussion générale
-  
-  script(type='text/javascript' src='/socket.io/socket.io.js')
-  script(src='/js/salonClient.js')
+  main#contenu.page-shell
+    header.page-heading
+      p.eyebrow Le point de rendez-vous
+      h1.title Les salons
+      p.muted Bienvenue #{utilisateur.nomUtilisateur}. Ouvrez une partie ou rejoignez un joueur.
+    include includes/messages.pug
+    .lobby-layout
+      section.panel.lobby-games(aria-labelledby='parties-titre')
+        .panel-heading-row
+          h2#parties-titre Parties disponibles
+          span#connection-status.connection-status(role='status') Connexion…
+        .partieDisponible(aria-live='polite')
+          p Recherche des salons…
+      aside.panel.lobby-aside
+        p.eyebrow À vous de lancer
+        h2 Le prochain record ?
+        p Une partie dure 90 secondes. Un second joueur vous rejoint, puis vous donnez le départ.
+        form.lancerJeuForm(action='/salon/salonDeJeu/room' method='post')
+          input(type='hidden' name='_csrf' value=csrfToken)
+          button.button.is-primary.is-fullwidth(type='submit') Ouvrir une partie →
+        a.button.is-outlined.is-fullwidth(href='/salon/discussion&jeu') Salon de discussion
+        .rules
+          h3 Comment jouer
+          p ← → pour se déplacer.
+          p Sur mobile, utilisez les deux boutons à l’écran.
+          p Attrapez les étoiles pour marquer des points.
+  script(src='/socket.io/socket.io.js')
+  script(src='/js/salonClient.js' defer)
   include includes/footer.pug

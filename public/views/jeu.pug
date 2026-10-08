@@ -4,7 +4,10 @@ script.
   window.nomUtilisateur = !{JSON.stringify(utilisateur.nomUtilisateur)}
 body
   include includes/header.pug
-  section.hero.is-primary
+  main#contenu.game-page
+    .game-toolbar
+      button#share-room.button.is-outlined(type='button') Copier l’invitation
+      button#sound-toggle.button.is-outlined(type='button' aria-pressed='false') Activer le son
     #chargement
       .bar.bar1
       .bar.bar2
@@ -16,14 +19,18 @@ body
       .bar.bar8
     #airDeJeu
       #menuDepart.menu
-        p nom salon #{nomDuSalon}
-        h1.title Eviter les pointes
-        p.subtitle Utiliser les flèches ← → pour vous déplacer
+        p.eyebrow Salon de #{nomDuSalon}
+        h1.title Attrapez les étoiles
+        p.subtitle Flèches ← → ou commandes tactiles pour se déplacer
         p.nbJoueur
-        button#btnDepart.button.cacher PLAY
-      canvas#gameCanvas
+        button#btnDepart.button.cacher Jouer
+      canvas#gameCanvas(width='960' height='540' aria-label='Aire de jeu. Déplacez votre joueur avec les flèches gauche et droite.')
+      .touch-controls(aria-label='Commandes du joueur')
+        button#move-left.button(type='button' aria-label='Se déplacer à gauche') ←
+        button#move-right.button(type='button' aria-label='Se déplacer à droite') →
+      p#game-status(role='status')
       #finPartie.menu
-        h1 Partie terminé
+        h1 Partie terminée
         p#resultat
         p#monScore
         p#autreScore

@@ -1,43 +1,14 @@
-const express = require('express')
-
-const router = express.Router()
+const router = require('express').Router()
 const { authentifie, assurerAuthentification } = require('../config/auth')
 const Score = require('../models/Score')
-
-// page d'accueil
 router.get('/', (req, res) => res.redirect('/connexion'))
-
-// Page de connexion
 router.get('/connexion', authentifie, (req, res) => res.render('connexion'))
-
-// Page d'inscription
 router.get('/inscription', authentifie, (req, res) => res.render('inscription'))
-
-// Page des stats du joueur
 router.get('/stats', assurerAuthentification, async (req, res) => {
-  await Score.find({
-    monNom: req.user.nomUtilisateur,
-  })
-    .sort({ date: -1 })
-    .then((lesScores) => {
-      // console.log('🚀 ~ lesScores', lesScores)
-      Score.find({ monNom: req.user.nomUtilisateur })
-        .sort({ monScore: -1 })
-        .limit(1)
-        .then((meilleurScore) => {
-          // console.log('🚀 ~ unScore', meilleurScore)
-          res.render('statsJoueur', {
-            utilisateur: req.user,
-            lesScores,
-            meilleurScore,
-          })
-        })
-    })
+  // Le nom couvre aussi les scores historiques sans identifiant utilisateur.
+  const filter = { $or: [{ monJoueurId: req.user._id }, { monJoueurId: { $exists: false }, monNom: req.user.nomUtilisateur }] }
+  const [lesScores, meilleurScore, total] = await Promise.all([Score.find(filter).sort({ date: -1 }).limit(100), Score.find(filter).sort({ monScore: -1 }).limit(1), Score.countDocuments(filter)])
+  res.render('statsJoueur', { lesScores, meilleurScore, total })
 })
-
-// acces au profil
-router.get('/profil', assurerAuthentification, (req, res) => {
-  res.render('profil', { utilisateur: req.user })
-})
-
+router.get('/profil', assurerAuthentification, (req, res) => res.render('profil'))
 module.exports = router

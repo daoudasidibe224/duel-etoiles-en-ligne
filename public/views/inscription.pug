@@ -1,49 +1,37 @@
 include includes/head.pug
-
 body
-
   include includes/header.pug
-  section.hero.is-primary
-    .hero-body.formulaire
-      .title.has-text-white Inscription
-      .card
-        .card-content
-          .content
-            include ./includes/messages.pug
-            form(action='/utilisateur/inscription', method='POST')
-              .field
-                p.control.has-icons-left.has-icons-right
-                  input.input(type='name', name='nomUtilisateur', placeholder='Nom d\'utilisateur' minlength="3" maxlength="24"  value= typeof nomUtilisateur != 'undefined' ? nomUtilisateur : '')
-                  //- les typeof sert a recuprer les données si elles existent (en cas d'erreur dans le a l'envoi du formulaire )
-                  span.icon.is-small.is-left
-                    i.fa.fa-user(aria-hidden='true')
-              .field
-                p.control.has-icons-left.has-icons-right
-                  input.input(type='email', name='email', id='email', placeholder="Entrer un email", value= typeof email != 'undefined' ? email : '', )
-                  span.icon.is-small.is-left
-                    i.fas.fa-envelope
-              .field
-                p.control.has-icons-left
-                  input.input(type='password', name='mdp', id='mdp', placeholder='Créer un mot de passe', value=typeof mdp != 'undefined' ? mdp : '', )
-                  span.icon.is-small.is-left
-                    i.fas.fa-lock
-              .field
-                p.control.has-icons-left
-                  input.input(type='password', name='mdp2', id='mdp2', placeholder='Confirmer votre mot de passe', value=typeof mdp2 != 'undefined' ? mdp2 : '', )
-                  span.icon.is-small.is-left
-                    i.fas.fa-lock
-              .control
-                button.button.is-primary S'inscrire
-              br
-              p Déja un compte ? 
-                a(href="/connexion") connectez-vous maintenant
-
-
-
+  main#contenu.auth-layout
+    section.arcade-intro
+      p.eyebrow Votre place dans l’arcade
+      h1.title Un pseudo.
+        br
+        span Des records.
+      p.intro-text Créez votre compte pour ouvrir une partie, discuter avec les autres joueurs et retrouver vos scores.
+      .arcade-scene(aria-hidden='true')
+        span.star.star-a ✦
+        img(src='/images/M&L.jpg' alt='')
+        span.scene-floor
+    section.auth-card(aria-labelledby='form-title')
+      h2#form-title Créer un compte
+      include includes/messages.pug
+      form(action='/utilisateur/inscription' method='post')
+        input(type='hidden' name='_csrf' value=csrfToken)
+        .field
+          label.label(for='nomUtilisateur') Pseudo
+          input#nomUtilisateur.input(type='text' name='nomUtilisateur' required minlength='3' maxlength='24' pattern='[A-Za-z0-9_-]{3,24}' autocomplete='username' value=typeof nomUtilisateur !== 'undefined' ? nomUtilisateur : '' aria-describedby='pseudo-aide')
+          p#pseudo-aide.help 3 à 24 lettres, chiffres, tirets ou tirets bas.
+        .field
+          label.label(for='email') Adresse email
+          input#email.input(type='email' name='email' required maxlength='254' autocomplete='email' value=typeof email !== 'undefined' ? email : '')
+        .field
+          label.label(for='mdp') Mot de passe
+          input#mdp.input(type='password' name='mdp' required minlength='8' maxlength='72' autocomplete='new-password' aria-describedby='mdp-aide')
+          p#mdp-aide.help Au moins 8 caractères, au maximum 72 octets.
+        .field
+          label.label(for='mdp2') Confirmer le mot de passe
+          input#mdp2.input(type='password' name='mdp2' required minlength='8' maxlength='72' autocomplete='new-password')
+        button.button.is-primary.is-fullwidth(type='submit') Créer mon compte →
+      p.form-foot Déjà un compte ?
+        a(href='/connexion') Se connecter
   include includes/footer.pug
-
-
-
-
-
-

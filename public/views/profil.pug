@@ -1,26 +1,18 @@
 include includes/head.pug
-
 body
-
   include includes/header.pug
-
-  section.hero.is-primary
-    .hero-body
-       section.hero.is-primary
-        .hero-body.formSalon
-          .card
-            header.card-header
-              p.card-header-title Modifier vos informations
-            .card-content
-              .content
-                include ./includes/messages.pug
-                form.form(action="/utilisateur/editer-profil" method="post" autocomplete="off")
-                  input.input(type="hidden" id="idUtilisateur"  name="idUtilisateur" value=`${utilisateur.id}`)
-                  label.label(for="nouveauNomUtilisateur") Nom d'utilisateur
-                    input.input(type="text" id="nouveauNomUtilisateur"  name="nouveauNomUtilisateur" value=`${utilisateur.nomUtilisateur}`)
-                  .field
-                    .buttons.is-centered
-                      button.button.is-primary Modifier
-
-
+  main#contenu.page-shell.narrow
+    header.page-heading
+      p.eyebrow Votre identité dans le jeu
+      h1.title Mon profil
+      p.muted= utilisateur.email
+    section.panel
+      include includes/messages.pug
+      form(action='/utilisateur/editer-profil' method='post')
+        input(type='hidden' name='_csrf' value=csrfToken)
+        .field
+          label.label(for='nouveauNomUtilisateur') Pseudo
+          input#nouveauNomUtilisateur.input(type='text' name='nouveauNomUtilisateur' value=utilisateur.nomUtilisateur required minlength='3' maxlength='24' pattern='[A-Za-z0-9_-]{3,24}' autocomplete='username')
+          p.help 3 à 24 lettres, chiffres, tirets ou tirets bas.
+        button.button.is-primary(type='submit') Enregistrer
   include includes/footer.pug

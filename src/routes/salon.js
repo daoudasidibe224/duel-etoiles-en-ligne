@@ -1,36 +1,20 @@
-const express = require('express')
+const { randomUUID } = require('node:crypto')
+const router = require('express').Router()
 const { assurerAuthentification } = require('../config/auth')
-
-const router = express.Router()
-
-// acces a la page d'index du salon (/salon)
-router.get('/', assurerAuthentification, (req, res) => {
-  res.render('salon', {
-    utilisateur: req.user,
-    salons: req.app.salons,
-  })
+router.use(assurerAuthentification)
+router.get('/', (req, res) => res.render('salon', { salons: req.app.salons }))
+router.get('/discussion&jeu', (req, res) => res.render('discussionForm'))
+router.post('/salonDeJeu/room', (req, res) => {
+  const salons = req.app.salons
+  if (Object.keys(salons).length >= 100) return res.status(429).send('Tous les salons sont occupés. Réessayez plus tard.')
+  const room = randomUUID()
+  salons[room] = { id: room, nomProprietaire: req.user.nomUtilisateur, proprietaireId: req.user.id, utilisateurs: [], createdAt: Date.now() }
+  res.redirect(`/salon/salonDeJeu/${room}`)
 })
-
-// acces discussion générale (/salon/discussion&jeu)
-router.get('/discussion&jeu', assurerAuthentification, (req, res) => {
-  res.render('discussionForm.pug', { utilisateur: req.user })
-})
-
-router.post('/salonDeJeu/room', assurerAuthentification, (req, res) => {
-  const { salons } = req.app
-  const nomProprietaire = req.user.nomUtilisateur
-  const { room } = req.body
-  salons[room] = { id: room, nomProprietaire, utilisateurs: [] }
-  res.redirect(room)
-})
-
-// identifiant du salon
 router.get('/salonDeJeu/:room', (req, res) => {
-  if (req.params.room == null) res.redirect('/')
-  res.render('jeu', {
-    room: req.params.room,
-    utilisateur: req.user,
-  })
+  const salon = req.app.salons[req.params.room]
+  if (!salon) return res.status(404).render('erreur', { titre: 'Salon fermé', message: 'Cette partie est terminée ou le salon n’existe plus.' })
+  if (salon.utilisateurs.length >= 2) return res.status(409).render('erreur', { titre: 'Salon complet', message: 'Deux joueurs ont déjà rejoint cette partie.' })
+  res.render('jeu', { room: salon.id, nomDuSalon: salon.nomProprietaire })
 })
-
 module.exports = router

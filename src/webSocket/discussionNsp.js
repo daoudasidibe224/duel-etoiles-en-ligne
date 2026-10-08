@@ -1,80 +1,25 @@
-/* eslint-disable consistent-return */
-/* eslint-disable no-console */
-const {
-  ajouterUtilisateur,
-  supprimerUtilisateur,
-  getUtilisateur,
-  getUtilisateursDansLeSalon,
-} = require('./socketUtilisateurs')
-
 const { generateMessage } = require('./socketMsg')
-
 module.exports = (discussionNsp) => {
+  const users = new Map()
+  const publish = () => discussionNsp.emit('roomData', { utilisateurs: [...users.values()] })
   discussionNsp.on('connection', (socket) => {
-    console.log('Nouveau Client(e) connecté(e) discution G')
-
-    socket.on('join', ({ nomUtilisateur, room }, callback) => {
-      const { error, utilisateur } = ajouterUtilisateur({
-        id: socket.id,
-        nomUtilisateur,
-        room,
-      })
-
-      if (error) return callback(error)
-
-      socket.join(utilisateur.room)
-
-      socket.emit(
-        'message',
-        generateMessage('Admin', `Bienvenue ${utilisateur.nomUtilisateur} !`)
-      )
-      socket.broadcast
-        .to(utilisateur.room)
-        .emit(
-          'message',
-          generateMessage(
-            'Admin',
-            `${utilisateur.nomUtilisateur} a rejoint la partie !`
-          )
-        )
-
-      discussionNsp.to(utilisateur.room).emit('roomData', {
-        room: utilisateur.room,
-        utilisateurs: getUtilisateursDansLeSalon(utilisateur.room),
-      })
-
+    let lastMessage = 0
+    socket.on('join', (payload, callback = () => {}) => {
+      if (users.has(socket.id)) return callback()
+      const user = { id: socket.id, nomUtilisateur: socket.request.user.nomUtilisateur }
+      users.set(socket.id, user)
+      socket.emit('message', generateMessage('Accueil', `Bienvenue ${user.nomUtilisateur} !`))
+      publish()
       callback()
     })
-
-    socket.on('envoyerMessage', (message, callback) => {
-      const utilisateur = getUtilisateur(socket.id)
-
-      discussionNsp
-        .to(utilisateur.room)
-        .emit('message', generateMessage(utilisateur.nomUtilisateur, message))
-
+    socket.on('envoyerMessage', (message, callback = () => {}) => {
+      const user = users.get(socket.id)
+      if (!user || typeof message !== 'string' || !message.trim() || message.length > 1000) return callback('Le message doit contenir de 1 à 1 000 caractères.')
+      if (Date.now() - lastMessage < 500) return callback('Attendez un instant avant d’envoyer un autre message.')
+      lastMessage = Date.now()
+      discussionNsp.emit('message', generateMessage(user.nomUtilisateur, message.trim()))
       callback()
     })
-
-    socket.on('disconnect', () => {
-      const utilisateur = supprimerUtilisateur(socket.id)
-      console.log(`Client(e) déconnecté(e) ${socket.id}`)
-      if (utilisateur) {
-        discussionNsp
-          .to(utilisateur.room)
-          .emit(
-            'message',
-            generateMessage(
-              'Admin',
-              `${utilisateur.nomUtilisateur} a quitté la partie !`
-            )
-          )
-        discussionNsp.to(utilisateur.room).emit('roomData', {
-          room: utilisateur.room,
-          utilisateurs: getUtilisateursDansLeSalon(utilisateur.room),
-        })
-        socket.leave(utilisateur.room)
-      }
-    })
+    socket.on('disconnect', () => { users.delete(socket.id); publish() })
   })
 }
