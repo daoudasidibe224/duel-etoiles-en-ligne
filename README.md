@@ -66,11 +66,13 @@ Les envois de discussion possèdent un identifiant. Réessayer un envoi conserve
 
 Les invités jouent avec les mêmes étapes et bonus. Leur résultat n’est pas enregistré dans l’historique ; créer un compte ne transfère pas les points précédents. La connexion ou la création d’un compte ferme l’ancienne session invitée et sa place. La sortie révoque le cookie et toutes ses connexions, sans libérer une place reprise par une autre session plus récente du même compte. Les sessions de compte durent 24 heures ; les sockets et la réserve de reprise s’arrêtent à l’échéance de leur accès.
 
+La fin normale d’une session renvoie vers l’entrée avec un avis discret. Une coupure ou une indisponibilité du serveur affiche un état de connexion et une tentative manuelle, sans prétendre que le compte a expiré. Un socket repris dans un autre onglet ne se reconnecte pas automatiquement pour reprendre la place.
+
 Les pages relisent l’accès courant à l’activation de l’onglet, à l’expiration et lors d’un changement de session diffusé entre onglets. Elles remplacent les anciens menus et contenus. Une vérification périodique complète cette synchronisation ; une coupure réseau garde la page et ne valide aucune opération. Une saisie privée non envoyée est conservée dans le stockage de l’onglet, sans mot de passe ni jeton, et restaurée seulement pour la même identité sur le même formulaire. Fermer l’onglet supprime cette copie locale.
 
 ## Interface et fontes
 
-L’interface prend la forme d’une borne arcade : panneaux à angles coupés, lignes de salon, journal de discussion et HUD distinct du canvas. Press Start 2P et Chakra Petch sont servis localement. Les fichiers et leurs licences SIL Open Font License proviennent du [répertoire officiel Google Fonts](https://github.com/google/fonts) et figurent dans `public/assets/fonts/`.
+L’interface réunit un lobby avec aperçu de l’arène, création de salon et liste des parties. Dans la manche, les scores encadrent la minuterie ; les bonus et les règles restent à côté de l’arène sur ordinateur et sous les commandes sur mobile. La navigation sépare les commandes de jeu et l’accès du joueur. Press Start 2P et Chakra Petch sont servis localement. Les fichiers et leurs licences SIL Open Font License proviennent du [répertoire officiel Google Fonts](https://github.com/google/fonts) et figurent dans `public/assets/fonts/`.
 
 ## Configuration et limites
 
@@ -83,3 +85,28 @@ Le navigateur calcule les déplacements et détecte les collisions. Le serveur g
 Les anciens scores sans identifiant de compte restent associés au pseudo historique. Si ce pseudo change, ils ne suivent pas le compte. Les nouveaux scores utilisent l’identifiant du joueur.
 
 Les tests navigateur démarrent leur propre serveur et MongoDB locale temporaire. Avant leur premier lancement : `npx playwright install chromium`. Ils utilisent un port libre et écrivent les captures dans `test-results/`.
+
+## Exécution dans un conteneur
+
+Le [dépôt public](https://github.com/daoudasidibe224/duel-etoiles-en-ligne) garde le serveur HTTP et Socket.IO dans le même processus. Le Dockerfile compile TypeScript puis installe uniquement les dépendances d’exécution ; le processus tourne avec l’utilisateur non privilégié `node`.
+
+```sh
+docker build -t duel-etoiles-en-ligne .
+docker run --rm --env-file .env -e NODE_ENV=production -p 5000:5000 duel-etoiles-en-ligne
+```
+
+Ce conteneur attend une base MongoDB accessible depuis son réseau. `localhost` dans l’URI désigne le conteneur, pas votre ordinateur. Le port interne suit `PORT`, compris entre 1 et 65535. `GET /health/live` vérifie le processus ; `GET /health/ready` vérifie MongoDB et renvoie 503 si la base est indisponible. Ces sondes ne créent pas de session. La CI construit aussi l’image.
+
+Pour une publication, configurez `SECRET`, `MONGODB_URI`, `NODE_ENV=production` et le port demandé par l’hébergeur. Servez les pages et Socket.IO sous la même origine HTTPS, avec un proxy qui accepte la mise à niveau WebSocket. Le serveur refuse un handshake navigateur provenant d’une autre origine ; aucune ouverture CORS générale n’est nécessaire. Activez `TRUST_PROXY=1` uniquement derrière un proxy de confiance. La configuration du cookie sécurisé ne doit pas être désactivée en production.
+
+La base doit offrir un stockage durable indépendant du disque du conteneur. Une offre qui met le processus en veille ou le redémarre interrompt les salons et les manches en mémoire. L’image seule ne fournit ni base distante ni domaine ni certificat ; un Blueprint Render est préparé, mais aucun service distant n’a été créé. Une seule instance applicative est nécessaire avec l’architecture actuelle.
+
+## Préparation Render gratuit
+
+`render.yaml` décrit un service Docker gratuit, en région Francfort, sur la branche `improve/public-2026-10`. La sonde est `/health/ready` et les déploiements automatiques sont désactivés. Au moment de créer le Blueprint, renseignez `SECRET` et `MONGODB_URI` dans Render : les valeurs `sync: false` ne contiennent aucun secret dans Git. Aucun service, abonnement ni compte cloud n’est créé par ce fichier.
+
+Utilisez une base MongoDB Atlas Free (anciennement M0), séparée du stockage Render. Ce cluster fournit un replica set et un stockage limité à 512 Mo ; il convient à une démonstration avec des données modestes. Choisissez une base propre à l’application, un utilisateur limité à cette base et autorisez les adresses de sortie de votre service dans l’accès réseau Atlas. L’URI doit indiquer la base et conserver TLS. Les sessions, comptes, messages et scores restent ainsi dans MongoDB. [Configuration des clusters Atlas](https://www.mongodb.com/docs/atlas/manage-clusters/).
+
+Render Free partage 750 heures d’instances par mois entre les services d’un même espace. Une instance se met en veille après 15 minutes sans trafic entrant, puis redémarre à la prochaine demande ; son disque est éphémère. La veille, un redéploiement ou un redémarrage ferme les connexions et efface les manches en mémoire. Gardez une seule instance Duel : la présence et les salons ne sont pas partagés entre plusieurs serveurs. Aucun dispositif ne contourne la veille. [Limites Render Free](https://render.com/docs/free), [WebSockets sur Render](https://render.com/docs/websocket), [référence du Blueprint](https://render.com/docs/blueprint-spec).
+
+La publication effective attend la connexion du fournisseur, la configuration de MongoDB et des secrets, puis une vérification sur l’URL HTTPS réelle. Les tests locaux du conteneur ne prouvent pas qu’un service distant est déjà disponible.

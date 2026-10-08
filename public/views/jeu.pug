@@ -2,63 +2,61 @@ include includes/head.pug
 link(rel='stylesheet' href='/styles/jeu.css')
 body
   include includes/header.pug
-  main#contenu.game-page
-    .game-toolbar
-      button#leave-game.button.is-outlined(type='button') Quitter la partie
-      button#share-room.button.is-outlined(type='button') Copier l’invitation
-      button#sound-toggle.button.is-outlined(type='button' aria-pressed='false') Activer le son
-    #chargement
-      .bar.bar1
-      .bar.bar2
-      .bar.bar3
-      .bar.bar4
-      .bar.bar5
-      .bar.bar6
-      .bar.bar7
-      .bar.bar8
-    #airDeJeu
-      #menuDepart.menu
+  main#contenu.game-page.page-shell
+    header.game-session-header
+      div
         p.eyebrow Salon de #{nomDuSalon}
-        h1.title Attrapez les étoiles
-        p.subtitle Flèches ← → ou commandes tactiles pour se déplacer
-        p.nbJoueur
-        button#btnDepart.button.cacher Jouer
-      #game-hud.game-hud(role='group' aria-label='Scores et temps restant')
-        .hud-player
-          span#self-name Vous
-          output#self-score(aria-label='Votre score') 0
-        .hud-timer
-          span Temps restant
-          span#countdown(role='timer') 1:30
-        .hud-player
-          span#other-name Second joueur
-          output#other-score(aria-label='Score du second joueur') 0
-      .stage-hud
-        p#stage-name Étape 1 / 3 · Prise en main
-        progress#stage-progress(value='0' max='90' aria-label='Progression de la manche')
-      canvas#gameCanvas(width='960' height='540' aria-label='Aire de jeu. Déplacez votre joueur avec les flèches gauche et droite.')
-      .touch-controls(aria-label='Commandes du joueur')
-        button#move-left.button(type='button' aria-label='Se déplacer à gauche') ←
-        button#move-right.button(type='button' aria-label='Se déplacer à droite') →
-      .bonus-controls(aria-label='Bonus du joueur')
-        button#bonus-sprint.button.is-outlined(type='button' disabled) Accélération · 8 s
-        button#bonus-multiplier.button.is-outlined(type='button' disabled) Points ×2 · 8 s
-        p#bonus-status Une charge par étape.
-        p#bonus-feedback(role='status')
-      details.game-rules
-        summary Règles et bonus
-        p Trois étapes de 30 secondes : les étoiles tombent de plus en plus vite. Chaque étoile est commune aux deux joueurs : le premier à la ramasser marque le point.
-        p Chaque étape offre une charge : accélération de 50 % ou points doublés pendant 8 secondes. Un seul bonus à la fois ; une charge non utilisée ne se reporte pas.
-        p Les flèches ou les commandes tactiles déplacent votre robot. Une coupure permet une reprise pendant 12 secondes ; quitter met fin à la manche.
-      p#game-status(role='status')
-      button#retry-score.button.is-outlined.cacher(type='button') Réessayer l’enregistrement
-      #finPartie.menu
-        h1 Partie terminée
-        p#resultat
-        p#monScore
-        p#autreScore
-        button#terminer.button Terminer
-        
+        h1 La manche d’étoiles
+      .game-toolbar
+        button#share-room.button.is-outlined(type='button') Copier l’invitation
+        button#sound-toggle.button.is-outlined(type='button' aria-pressed='false') Activer le son
+        button#leave-game.button.is-outlined(type='button') Quitter la partie
+    #chargement(role='status') Connexion à la partie…
+    #airDeJeu
+      .arena-layout
+        section.arena-main(aria-label='Arène et scores')
+          #game-hud.game-hud(role='group' aria-label='Scores et temps restant')
+            .hud-player
+              span#self-name Vous
+              output#self-score(aria-label='Votre score') 0
+            .hud-timer
+              span Temps restant
+              span#countdown(role='timer') 1:30
+            .hud-player
+              span#other-name Second joueur
+              output#other-score(aria-label='Score du second joueur') 0
+          .stage-hud
+            p#stage-name Étape 1 / 3 · Prise en main
+            progress#stage-progress(value='0' max='90' aria-label='Progression de la manche')
+          canvas#gameCanvas(width='960' height='540' aria-label='Aire de jeu. Déplacez votre joueur avec les flèches gauche et droite.')
+          .touch-controls(aria-label='Commandes du joueur')
+            button#move-left.button(type='button' aria-label='Se déplacer à gauche') ←
+            span Flèches ou commandes tactiles
+            button#move-right.button(type='button' aria-label='Se déplacer à droite') →
+        aside.arena-sidebar(aria-label='Départ et bonus')
+          #menuDepart.menu
+            p.eyebrow Avant le départ
+            h2 Attrapez les étoiles
+            p.nbJoueur
+            button#btnDepart.button.cacher Jouer
+          section.bonus-controls(aria-label='Bonus du joueur')
+            h2 Votre bonus
+            p#bonus-status Une charge par étape.
+            button#bonus-sprint.button.is-outlined(type='button' disabled) Accélération · 8 s
+            button#bonus-multiplier.button.is-outlined(type='button' disabled) Points ×2 · 8 s
+            p#bonus-feedback(role='status')
+          details.game-rules
+            summary Règles et bonus
+            p Trois étapes de 30 secondes : les étoiles tombent de plus en plus vite. Chaque étoile est commune aux deux joueurs : le premier à la ramasser marque le point.
+            p Chaque étape offre une charge : accélération de 50 % ou points doublés pendant 8 secondes. Un seul bonus à la fois ; une charge non utilisée ne se reporte pas.
+            p Une coupure permet une reprise pendant 12 secondes ; quitter met fin à la manche.
+          p#game-status(role='status')
+          button#retry-score.button.is-outlined.cacher(type='button') Réessayer l’enregistrement
+          #finPartie.menu
+            h2 Partie terminée
+            p#resultat
+            p#monScore
+            p#autreScore
+            button#terminer.button Terminer
   script(src='/js/jeuClient.js')
-
   include includes/footer.pug

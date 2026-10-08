@@ -1,200 +1,314 @@
-#chargement {
-  padding: 3rem;
-  text-align: center;
+.game-page {
+  min-height: 75vh;
+  padding-top: 28px;
 }
-#chargement:after {
-  content: "Chargement de la borne…";
-  color: var(--mint);
+.game-session-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: center;
+  margin-bottom: 26px;
+}
+.game-session-header h1 {
+  font-size: 1.7rem;
+  margin: 6px 0 0;
+}
+.game-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.game-toolbar .button {
+  font-size: 12px;
+  padding: 8px 12px;
+  min-height: 37px;
+}
+#chargement {
+  text-align: center;
+  padding: 80px 24px;
+  color: var(--muted);
 }
 #airDeJeu {
   display: none;
-  position: relative;
-  max-width: 1060px;
-  margin: 1.5rem auto 3rem;
-  padding: 0 4vw;
+}
+.arena-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 28px;
+  align-items: start;
+}
+.arena-main {
+  min-width: 0;
+}
+.arena-sidebar {
+  border-left: 1px solid var(--line);
+  padding-left: 25px;
+  font-size: 13px;
+}
+.arena-sidebar h2 {
+  font-size: 1.1rem;
 }
 #gameCanvas {
   width: 100%;
   aspect-ratio: 16/9;
   display: block;
   background: #080e0a;
-  border: 2px solid var(--mint);
-  border-radius: 0;
-  image-rendering: pixelated;
-  box-shadow: 5px 5px 0 var(--line);
-}
-#airDeJeu .menu {
-  background: var(--paper);
-  border: 1px solid var(--yellow);
-  padding: 1.3rem 1.5rem;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  color: var(--text);
-  margin-bottom: 1.3rem;
-}
-#airDeJeu .menu h1 {
-  font-size: clamp(1rem, 2vw, 1.4rem);
-  margin: 0;
-  color: var(--yellow);
-}
-#airDeJeu .menu p {
-  margin: 0;
-  font-size: 0.9rem;
-}
-#airDeJeu #finPartie {
-  display: none;
-  margin-top: 1.2rem;
-}
-.touch-controls {
-  display: flex;
-  justify-content: space-between;
-  margin: 1.2rem auto;
-  max-width: 400px;
-  gap: 1rem;
-}
-.touch-controls button {
-  width: 100px;
-  font-size: 1.6rem;
-  touch-action: none;
-  background: var(--paper);
-  color: var(--mint);
   border: 1px solid var(--line);
-}
-.cacher {
-  display: none !important;
-}
-#game-status {
-  color: var(--yellow);
-  text-align: center;
-  min-height: 2rem;
-}
-.game-page {
-  min-height: 75vh;
-}
-.game-toolbar {
-  display: flex;
-  justify-content: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  margin: 1.5rem 1rem 0;
+  border-radius: 7px;
+  image-rendering: pixelated;
 }
 .game-hud {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: 1rem;
-  margin-bottom: 1rem;
-  padding: 1rem 0;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  gap: 16px;
+  padding: 14px 20px;
+  background: var(--paper);
+  border-radius: 6px;
 }
 .hud-player,
 .hud-timer {
   display: flex;
   flex-direction: column;
-  text-align: center;
   min-width: 0;
+  text-align: center;
 }
 .hud-player span,
 .hud-timer > span:first-child {
-  font-size: 0.8rem;
-  overflow-wrap: anywhere;
+  font-size: 11px;
   color: var(--muted);
-  margin-bottom: 0.5rem;
+  overflow-wrap: anywhere;
+  margin-bottom: 9px;
 }
 .hud-player output,
 #countdown {
   font-family: Pixel, monospace;
-  font-size: 1.4rem;
-  color: var(--mint);
+  font-size: 19px;
   font-weight: 400;
   line-height: 1.5;
+  color: var(--mint);
 }
 #countdown {
   color: var(--yellow);
 }
-@media (max-width: 600px) {
-  #airDeJeu {
-    padding: 0 5vw;
-  }
-  .hud-player output,
-  #countdown {
-    font-size: 1rem;
-  }
-  .hud-timer > span:first-child {
-    max-width: 80px;
-  }
-  .game-hud {
-    gap: 0.5rem;
-  }
-  #airDeJeu .menu {
-    padding: 1rem;
-  }
-  .game-toolbar .button {
-    font-size: 0.85rem;
-  }
-}
-
 .stage-hud {
   display: flex;
-  align-items: center;
+  gap: 16px;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 0.7rem 0;
-  color: var(--yellow);
+  align-items: center;
+  padding: 13px 2px;
+  font-size: 12px;
+  color: var(--muted);
 }
 .stage-hud p {
   margin: 0;
 }
 .stage-hud progress {
-  width: 30%;
-  height: 0.65rem;
+  width: 25%;
+  height: 4px;
   accent-color: var(--yellow);
+}
+.touch-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 13px auto;
+}
+.touch-controls span {
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+.touch-controls button {
+  width: 62px;
+  min-height: 40px;
+  font-size: 20px;
+  touch-action: none;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  color: var(--mint);
+}
+#airDeJeu .menu {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 0 24px;
+}
+#airDeJeu .menu p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+#airDeJeu #finPartie {
+  display: none;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
 }
 .bonus-controls {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 1rem 0;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px 0;
+  border-top: 1px solid var(--line);
 }
 .bonus-controls p {
   margin: 0;
+  color: var(--muted);
+  font-size: 12px;
 }
 .bonus-controls button {
-  font-size: 0.85rem;
-}
-.game-rules {
-  border-top: 1px solid var(--line);
-  padding: 1rem 0;
-}
-.game-rules summary {
-  cursor: pointer;
-  color: var(--yellow);
-}
-.game-rules p {
-  max-width: 80ch;
+  font-size: 12px;
+  justify-content: start;
 }
 .bonus-controls button:disabled {
   cursor: default;
 }
-@media (max-width: 600px) {
+.game-rules {
+  border-top: 1px solid var(--line);
+  padding: 18px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.game-rules summary {
+  color: var(--text);
+  cursor: pointer;
+}
+.game-rules p {
+  line-height: 1.65;
+  margin-top: 12px;
+}
+#game-status {
+  color: var(--yellow);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.cacher {
+  display: none !important;
+}
+@media (max-width: 900px) {
+  .arena-layout {
+    grid-template-columns: minmax(0, 1fr) 205px;
+    gap: 20px;
+  }
+  .arena-sidebar {
+    padding-left: 20px;
+  }
+  .game-session-header {
+    align-items: start;
+    flex-direction: column;
+    gap: 17px;
+  }
+  .game-toolbar .button {
+    font-size: 11px;
+  }
+}
+@media (max-width: 650px) {
+  .game-page {
+    padding-top: 23px;
+  }
+  .game-session-header {
+    gap: 14px;
+    margin-bottom: 21px;
+  }
+  .game-session-header h1 {
+    font-size: 1.45rem;
+  }
+  .game-toolbar {
+    width: 100%;
+    gap: 6px;
+  }
+  .game-toolbar .button {
+    flex: 1;
+    padding: 7px 9px;
+    min-height: 34px;
+    font-size: 10px;
+  }
+  .arena-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .arena-main {
+    width: 100%;
+  }
+  .arena-sidebar {
+    border: 0;
+    border-top: 1px solid var(--line);
+    padding: 18px 0 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  .game-hud {
+    padding: 12px 8px;
+    gap: 9px;
+  }
+  .hud-player output,
+  #countdown {
+    font-size: 14px;
+  }
+  .hud-player span,
+  .hud-timer > span:first-child {
+    font-size: 10px;
+  }
   .stage-hud {
-    display: block;
-    font-size: 0.85rem;
+    font-size: 10px;
+    gap: 10px;
   }
   .stage-hud progress {
-    width: 100%;
+    width: 20%;
   }
-  .bonus-controls .button {
-    flex: 1;
-    min-width: 120px;
+  .touch-controls {
+    margin: 10px auto;
   }
+  .touch-controls span {
+    font-size: 10px;
+  }
+  .touch-controls button {
+    width: 55px;
+    min-height: 38px;
+  }
+  .bonus-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 9px;
+    padding: 16px 0;
+  }
+  .bonus-controls h2,
   .bonus-controls p {
+    grid-column: 1/-1;
+  }
+  .bonus-controls button {
+    justify-content: center;
+    font-size: 11px;
+    padding: 9px;
+  }
+  #menuDepart {
+    order: -1;
+  }
+  #menuDepart .button {
     width: 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+.arena-sidebar > .bonus-controls {
+  border-top: 0;
+}
+@media (max-width: 650px) {
+  .game-toolbar .button {
+    min-height: 44px;
+  }
+  .touch-controls button {
+    min-height: 44px;
+  }
+  .bonus-controls button {
+    min-height: 44px;
   }
 }

@@ -4,37 +4,37 @@ header.navbar.arcade-system(class=authCompact ? 'auth-header' : undefined)
     a.brand(href=joueur ? '/salon' : '/jouer' aria-label='Duel d’étoiles en ligne, accueil')
       span.brand-icon(aria-hidden='true') ✦
       span Duel d’étoiles en ligne
+    span.arcade-caption Arcade à deux joueurs
     button.navbar-burger(type='button' data-target='navMenubd' aria-controls='navMenubd' aria-expanded='false' aria-label='Ouvrir le menu')
       span(aria-hidden='true')
       span(aria-hidden='true')
       span(aria-hidden='true')
-  if joueur && joueur.kind === 'guest'
-    .guest-access
-      span Invité · #{joueur.nomUtilisateur}
-      form(action='/utilisateur/deconnexion' method='post')
-        input(type='hidden' name='_csrf' value=csrfToken)
-        button(type='submit') Quitter la session invitée
-  nav#navMenubd.navbar-menu(aria-label='Commandes de l’arcade')
-    .navbar-start
-      if joueur
-        a.navbar-item(href='/salon') Salons de jeu
-        a.navbar-item(href='/salon/discussion&jeu') Discussion
-        if joueur.kind === 'account'
-          a.navbar-item(href='/stats') Historique des scores
+  .command-row
+    nav#navMenubd.navbar-menu(aria-label='Commandes de l’arcade')
+      .navbar-start
+        if joueur
+          a.navbar-item(href='/salon' aria-current=currentPath === '/salon' ? 'page' : undefined) Salons de jeu
+          a.navbar-item(href='/salon/discussion&jeu' aria-current=currentPath === '/salon/discussion&jeu' ? 'page' : undefined) Discussion
+          if joueur.kind === 'account'
+            a.navbar-item(href='/stats' aria-current=currentPath === '/stats' ? 'page' : undefined) Historique des scores
+          else
+            a.navbar-item(href='/connexion') Compte et scores durables
         else
-          a.navbar-item(href='/connexion') Compte et scores durables
-      else
-        a.navbar-item(href='/jouer') Jouer par pseudo
-        a.navbar-item(href='/connexion') Connexion compte
-        a.navbar-item(href='/inscription') Créer un compte
-    if joueur && joueur.kind === 'account'
-      .navbar-end
-        a.navbar-item(href='/profil') Profil · #{joueur.nomUtilisateur}
-        form.navbar-item(action='/utilisateur/deconnexion' method='post')
+          a.navbar-item(href='/jouer' aria-current=currentPath === '/jouer' ? 'page' : undefined) Jouer par pseudo
+          a.navbar-item(href='/connexion' aria-current=currentPath === '/connexion' ? 'page' : undefined) Connexion compte
+          a.navbar-item(href='/inscription' aria-current=currentPath === '/inscription' ? 'page' : undefined) Créer un compte
+      if joueur && joueur.kind === 'account'
+        .navbar-end
+          a.navbar-item(href='/profil' aria-current=currentPath === '/profil' ? 'page' : undefined) Profil · #{joueur.nomUtilisateur}
+          form.navbar-item(action='/utilisateur/deconnexion' method='post')
+            input(type='hidden' name='_csrf' value=csrfToken)
+            button.session-exit(type='submit') Déconnexion
+    if joueur && joueur.kind === 'guest'
+      .guest-access
+        span Invité · #{joueur.nomUtilisateur}
+        form(action='/utilisateur/deconnexion' method='post')
           input(type='hidden' name='_csrf' value=csrfToken)
-          button.button.is-outlined(type='submit') Déconnexion
-#access-ended.notification.is-danger.cacher(role='alert' tabindex='-1')
+          button.session-exit(type='submit') Quitter la session invitée
+#access-ended.session-status(hidden role='status')
   p#access-ended-message
-  a(href='/jouer') Reprendre l’accès au jeu
-  | #{' · '}
-  a(href='/connexion') Se reconnecter au compte
+  button#session-retry(type='button') Réessayer la connexion

@@ -16,10 +16,15 @@ export function inputElement(id: string): HTMLInputElement {
 }
 
 export function accessEnded(message: string) {
-  const alert = element("access-ended");
-  const text = element("access-ended-message");
-  text.textContent = message;
-  alert.classList.remove("cacher");
-  alert.focus();
-  window.dispatchEvent(new Event("session-ended"));
+  window.dispatchEvent(new CustomEvent("session-ended", { detail: message }));
+}
+export function bindSessionResume(client: {
+  connected: boolean;
+  connect: () => unknown;
+}) {
+  window.addEventListener("session-verified", () => {
+    window.setTimeout(() => {
+      if (!client.connected) client.connect();
+    }, 60);
+  });
 }

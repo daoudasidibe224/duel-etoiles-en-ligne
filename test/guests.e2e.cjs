@@ -70,6 +70,11 @@ const { createApp } = require("../dist/src/app"),
     await p.getByRole("button", { name: "Jouer par pseudo" }).click();
     await p.waitForURL("**/salon");
     await p.getByText("En ligne", { exact: true }).waitFor();
+    assert.equal(
+      await p.locator("#access-ended").isVisible(),
+      false,
+      "aucun faux bandeau d’expiration pendant une session canonique",
+    );
   }
   try {
     const ca = await context(1440),
@@ -113,6 +118,27 @@ const { createApp } = require("../dist/src/app"),
     }
     await b.setViewportSize({ width: 390, height: 844 });
     await b.goto(base + "/salon");
+    await ca.setOffline(true);
+    await a.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await a
+      .getByText(
+        "La connexion au serveur est interrompue. Votre saisie reste dans cet onglet.",
+        { exact: true },
+      )
+      .waitFor();
+    assert.equal(
+      await a.getByRole("link", { name: /Profil/ }).count(),
+      0,
+      "un invité reste invité pendant la panne",
+    );
+    await ca.setOffline(false);
+    await a
+      .getByRole("button", { name: "Réessayer la connexion", exact: true })
+      .click();
+    await a.waitForFunction(
+      () => document.getElementById("access-ended").hidden,
+    );
+    await a.getByText("En ligne", { exact: true }).waitFor();
     await a.getByRole("button", { name: "Ouvrir une partie" }).click();
     await a.waitForURL("**/salon/salonDeJeu/*");
     const matchUrl = a.url(),
@@ -204,6 +230,7 @@ const { createApp } = require("../dist/src/app"),
       ]) {
         await a.goto(base + route);
         await noOverflow(a);
+        assert.equal(await a.locator("#access-ended").isVisible(), false);
         await menu(a);
       }
     }
@@ -305,6 +332,11 @@ const { createApp } = require("../dist/src/app"),
         await p.getByRole("button", { name: "Créer mon compte" }).click();
         await p.waitForURL("**/salon");
         await p.getByText("En ligne", { exact: true }).waitFor();
+        assert.equal(
+          await p.locator("#access-ended").isVisible(),
+          false,
+          "aucun faux bandeau d’expiration pendant une session canonique",
+        );
       }
       await p.waitForURL(mode === "guest" ? "**/jouer" : "**/jouer", {
         timeout: 7000,

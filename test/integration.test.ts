@@ -674,10 +674,24 @@ test("progression, étoiles communes et bonus ne se rejouent pas après reprise"
   }
 });
 
+test("sondes publiques sans session et disponibilité de Mongo", async () => {
+  for (const route of ["/health/live", "/health/ready"]) {
+    const response = await request(app).get(route);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers["set-cookie"], undefined);
+    assert.equal(response.headers["cache-control"], "no-store");
+  }
+});
+
 test("une base indisponible affiche une erreur sans valider de sauvegarde", async () => {
   const account = await register("indisponible");
   sockets.forEach((client) => client.disconnect());
   await mongo.stop();
+  assert.equal((await request(app).get("/health/live")).status, 200);
+  assert.equal(
+    (await request(app).get("/health/ready").timeout(5000)).status,
+    503,
+  );
   const response = await request(app)
     .get("/stats")
     .set("Cookie", account.cookie)

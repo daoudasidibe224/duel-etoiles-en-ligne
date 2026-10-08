@@ -1,33 +1,51 @@
 include includes/head.pug
 body
   include includes/header.pug
-  main#contenu.page-shell
-    header.page-heading
-      p.eyebrow DUEL / LOBBY
-      h1.title Choisir une partie
-      p.muted Bienvenue #{joueur.nomUtilisateur}. Ouvrez une partie ou rejoignez un joueur.
-    if joueur.kind === 'guest'
-      p.guest-notice Mode invité : scores visibles à la fin de la manche. #[a(href='/inscription') Créer un compte] pour conserver les prochaines parties.
+  main#contenu.page-shell.lobby-page
+    header.page-heading.lobby-heading
+      div
+        p.eyebrow Les salons
+        h1.title Choisir une partie
+        p.muted Bienvenue #{joueur.nomUtilisateur}. La prochaine manche vous attend.
+      .match-facts(aria-label='Format des parties')
+        span 2 joueurs
+        span 90 secondes
+        span 3 étapes
     include includes/messages.pug
     .lobby-layout
-      section.panel.lobby-games(aria-labelledby='parties-titre')
+      aside.lobby-launch(aria-labelledby='nouvelle-partie-titre')
+        img.arena-preview(src='/images/arena-preview.svg' alt='Deux robots et une étoile dans l’arène.' width='640' height='300')
+        .launch-content
+          p.eyebrow Votre propre salon
+          h2#nouvelle-partie-titre Invitez un adversaire
+          p.muted Ouvrez une partie et partagez son lien. Vous donnez le départ quand vous êtes deux.
+          form.lancerJeuForm(action='/salon/salonDeJeu/room' method='post')
+            input(type='hidden' name='_csrf' value=csrfToken)
+            button.button.is-primary.is-fullwidth(type='submit') Ouvrir une partie →
+          if joueur.kind === 'guest'
+            p.help Votre score invité reste visible en fin de manche. #[a(href='/inscription') Créer un compte] pour garder vos prochaines parties.
+      section.lobby-games(aria-labelledby='parties-titre')
         .panel-heading-row
           h2#parties-titre Parties disponibles
-          span#connection-status.connection-status(role='status') Connexion…
+          span#connection-status.connection-status(role='status' data-state='loading') Connexion…
         .partieDisponible(aria-live='polite')
-          p Recherche des salons…
-      aside.panel.lobby-aside
-        p.eyebrow NOUVELLE PARTIE
-        h2 Prenez les commandes
-        p Une partie dure 90 secondes. Un second joueur vous rejoint, puis vous donnez le départ.
-        form.lancerJeuForm(action='/salon/salonDeJeu/room' method='post')
-          input(type='hidden' name='_csrf' value=csrfToken)
-          button.button.is-primary.is-fullwidth(type='submit') Ouvrir une partie →
-        a.button.is-outlined.is-fullwidth(href='/salon/discussion&jeu') Salon de discussion
-        .rules
-          h3 Comment jouer
-          p ← → pour se déplacer.
-          p Sur mobile, utilisez les deux boutons à l’écran.
-          p Attrapez les étoiles pour marquer des points.
+          .lobby-loading
+            span.loading-dot(aria-hidden='true')
+            p Recherche des salons…
+    section.lobby-guide(aria-labelledby='regles-titre')
+      div
+        h2#regles-titre Une manche, trois étapes
+        p.muted Ramassez les étoiles. Leur rythme augmente toutes les 30 secondes.
+      .guide-item
+        span.guide-symbol(aria-hidden='true') ← →
+        div
+          h3 Gardez le contrôle
+          p Clavier ou commandes tactiles pour déplacer votre robot.
+      .guide-item
+        span.guide-symbol(aria-hidden='true') ✦
+        div
+          h3 Choisissez votre bonus
+          p Une charge par étape : accélération ou points doublés pendant 8 secondes.
+      a.discussion-link(href='/salon/discussion&jeu') Retrouvez les joueurs dans la discussion →
   script(src='/js/salonClient.js' defer)
   include includes/footer.pug

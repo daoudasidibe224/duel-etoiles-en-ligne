@@ -4,21 +4,31 @@ import {
   type ServerEvents,
   type ClientEvents,
 } from "../shared/contracts";
-import { accessEnded, element } from "./dom";
+import { accessEnded, bindSessionResume, element } from "./dom";
 const client: Socket<ServerEvents, ClientEvents> = io();
 const list = document.querySelector(".partieDisponible"),
+  createButton = document.querySelector<HTMLButtonElement>(
+    ".lancerJeuForm button",
+  ),
   status = element("connection-status");
 if (!list) throw new Error("Liste des salons introuvable");
+bindSessionResume(client);
 client.on("accessEnded", accessEnded);
 client.on("connect", () => {
   status.textContent = "En ligne";
+  status.dataset.state = "online";
+  if (createButton) createButton.disabled = false;
   client.emit("join", {}, () => {});
 });
 client.on("disconnect", () => {
-  status.textContent = "Connexion interrompue";
+  status.textContent = "Hors ligne · reconnexion…";
+  status.dataset.state = "offline";
+  if (createButton) createButton.disabled = true;
 });
 client.on("connect_error", () => {
-  status.textContent = "Connexion impossible. Rechargez la page.";
+  status.textContent = "Connexion indisponible · nouvel essai…";
+  status.dataset.state = "offline";
+  if (createButton) createButton.disabled = true;
 });
 client.on("majSalonDeJeu", (payload) => {
   const parsed = roomsSchema.safeParse(payload);
@@ -34,10 +44,10 @@ client.on("majSalonDeJeu", (payload) => {
     const empty = document.createElement("div");
     empty.className = "empty-state";
     const title = document.createElement("h3");
-    title.textContent = "La piste est libre.";
+    title.textContent = "Aucun salon en attente";
     const text = document.createElement("p");
     text.textContent =
-      "Aucune partie en attente. Ouvrez votre salon et invitez un ami.";
+      "Créez le vôtre et partagez son invitation. Les salons disponibles apparaîtront ici.";
     empty.append(title, text);
     list.append(empty);
   }

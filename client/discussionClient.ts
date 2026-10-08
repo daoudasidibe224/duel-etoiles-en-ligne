@@ -5,7 +5,7 @@ import {
   type ServerEvents,
   type ClientEvents,
 } from "../shared/contracts";
-import { accessEnded, element, inputElement } from "./dom";
+import { accessEnded, bindSessionResume, element, inputElement } from "./dom";
 const client: Socket<ServerEvents, ClientEvents> = io("/discussion");
 const status = element("chat-status"),
   form = element("envoyerMessage"),
@@ -16,6 +16,7 @@ if (!button || !chat) throw new Error("Discussion introuvable");
 let pending: { id: string; text: string } | undefined;
 const seen = new Set<string>();
 let sending = false;
+bindSessionResume(client);
 client.on("accessEnded", accessEnded);
 client.on("connect", () => {
   status.textContent = "Vous êtes en ligne.";

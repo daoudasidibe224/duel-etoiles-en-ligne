@@ -1,3 +1,4 @@
+import { registerHealth } from "./health";
 import { IdentityAuthority } from "./services/identities";
 import { sessionId } from "./types";
 import type { SocketData } from "./types";
@@ -61,6 +62,7 @@ export function createApp({
     },
   });
   app.disable("x-powered-by");
+  registerHealth(app);
   if (process.env.TRUST_PROXY === "1") app.set("trust proxy", 1);
   app.use(
     helmet({
@@ -232,6 +234,7 @@ export function createApp({
       req.session.cookie.expires?.getTime(),
     );
     res.locals.sessionState = canonical(req);
+    res.locals.currentPath = req.path;
     res.locals.authCompact = ["/jouer", "/connexion", "/inscription"].includes(
       req.path,
     );

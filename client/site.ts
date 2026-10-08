@@ -53,7 +53,8 @@ const expectedIdentity = identityMeta?.content ?? "visitor";
 let checking = false,
   navigating = false,
   recheckPending = false,
-  dirty = false;
+  dirty = false,
+  transportVerification = false;
 document.addEventListener("input", () => {
   dirty = true;
 });
@@ -61,6 +62,13 @@ const channel =
   typeof BroadcastChannel === "function"
     ? new BroadcastChannel("session-state")
     : undefined;
+function connectionNotice(message: string | undefined) {
+  const banner = document.getElementById("access-ended"),
+    text = document.getElementById("access-ended-message");
+  if (!banner || !text) return;
+  banner.hidden = !message;
+  text.textContent = message ?? "";
+}
 async function checkSession() {
   if (navigating) return;
   if (checking) {
@@ -73,7 +81,12 @@ async function checkSession() {
       cache: "no-store",
       credentials: "same-origin",
     });
-    if (!response.ok) return;
+    if (!response.ok) {
+      connectionNotice(
+        "Le serveur est momentanément indisponible. Votre saisie reste dans cet onglet.",
+      );
+      return;
+    }
     const value: unknown = await response.json();
     if (
       !value ||
@@ -84,7 +97,14 @@ async function checkSession() {
       typeof value.identity !== "string"
     )
       return;
-    if (value.key === expectedSession) return;
+    if (value.key === expectedSession) {
+      connectionNotice(undefined);
+      if (transportVerification) {
+        transportVerification = false;
+        window.dispatchEvent(new Event("session-verified"));
+      }
+      return;
+    }
     navigating = true;
     if (dirty && expectedIdentity !== "visitor") {
       const fields: Record<string, { value: string; checked?: boolean }> = {};
@@ -117,12 +137,16 @@ async function checkSession() {
       "session-refresh",
       dirty
         ? "La session a changé. Votre brouillon est conservé dans cet onglet pour votre compte."
-        : "La session a changé. L’accès affiché est à jour.",
+        : value.identity === "visitor"
+          ? "Votre session est terminée. Vous pouvez reprendre quand vous voulez."
+          : "Votre accès a été mis à jour.",
     );
     channel?.postMessage("changed");
     location.replace(value.identity === "visitor" ? ENTRY_PATH : HOME_PATH);
   } catch {
-    /* Une coupure réseau ne détruit pas la page ni le brouillon. */
+    connectionNotice(
+      "La connexion au serveur est interrompue. Votre saisie reste dans cet onglet.",
+    );
   } finally {
     checking = false;
     if (recheckPending && !navigating) {
@@ -145,6 +169,7 @@ document.addEventListener("visibilitychange", () => {
   if (!document.hidden) void checkSession();
 });
 window.addEventListener("session-ended", () => {
+  transportVerification = true;
   void checkSession();
 });
 let interval: number | undefined;
@@ -216,3 +241,7 @@ if (draft && expectedIdentity !== "visitor") {
     sessionStorage.removeItem(draftKey);
   }
 }
+
+document.getElementById("session-retry")?.addEventListener("click", () => {
+  void checkSession();
+});

@@ -12,7 +12,7 @@ import {
   type PlayerState,
 } from "../shared/contracts";
 import { activeBonus, stageAt, STAGES } from "../shared/progression";
-import { accessEnded, element, canvasElement } from "./dom";
+import { accessEnded, bindSessionResume, element, canvasElement } from "./dom";
 const client: Socket<ServerEvents, ClientEvents> = io("/jeu", {
   transports: ["websocket"],
 });
@@ -284,21 +284,6 @@ function draw() {
         );
     }
   }
-  ctx.fillStyle = "#fff";
-  ctx.font = "17px Arial";
-  ctx.textAlign = "left";
-  ctx.fillText(`${self?.name || ""} : ${self?.score || 0}`, 12, 521);
-  ctx.textAlign = "center";
-  ctx.fillText(
-    `${Math.floor(remaining / 60)
-      .toString()
-      .padStart(2, "0")}:${(remaining % 60).toString().padStart(2, "0")}`,
-    480,
-    521,
-  );
-  ctx.textAlign = "right";
-  for (const runner of others.values())
-    ctx.fillText(`${runner.name} : ${runner.score}`, 948, 521);
   animation = requestAnimationFrame(draw);
 }
 client.on("identity", (id) => {
@@ -316,6 +301,7 @@ client.on("roomClosed", (reason) => {
   start.classList.add("cacher");
   status.textContent = reason;
 });
+bindSessionResume(client);
 client.on("accessEnded", accessEnded);
 client.on("connect", () =>
   client.emit("join", { room }, (error) => {
