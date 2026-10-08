@@ -4,11 +4,9 @@ body
   main#contenu.auth-layout
     section.arcade-intro
       p.eyebrow L’arcade à deux
-      h1.title Courez.
+      h1.title Attrapez les étoiles.
         br
-        | Ramassez.
-        br
-        span Recommencez.
+        span Défiez votre ami.
       p.intro-text Retrouvez un ami, attrapez les étoiles et faites grimper votre score dans une partie de 90 secondes.
       .arcade-scene(aria-hidden='true')
         span.star.star-a ✦
@@ -31,5 +29,6 @@ body
           input#mdp.input(type='password' name='mdp' required autocomplete='current-password')
         button.button.is-primary.is-fullwidth(type='submit') Entrer dans l’arcade →
       p.form-foot Vous découvrez le jeu ?
+        | #{' '}
         a(href='/inscription') Créer un compte
   include includes/footer.pug

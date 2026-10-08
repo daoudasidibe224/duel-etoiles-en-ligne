@@ -1,7 +1,5 @@
 include includes/head.pug
 link(rel='stylesheet' href='/styles/jeu.css')
-script.
-  window.nomUtilisateur = !{JSON.stringify(utilisateur.nomUtilisateur)}
 body
   include includes/header.pug
   main#contenu.game-page
@@ -24,6 +22,16 @@ body
         p.subtitle Flèches ← → ou commandes tactiles pour se déplacer
         p.nbJoueur
         button#btnDepart.button.cacher Jouer
+      #game-hud.game-hud(role='group' aria-label='Scores et temps restant')
+        .hud-player
+          span#self-name Vous
+          output#self-score(aria-label='Votre score') 0
+        .hud-timer
+          span Temps restant
+          span#countdown(role='timer') 1:30
+        .hud-player
+          span#other-name Second joueur
+          output#other-score(aria-label='Score du second joueur') 0
       canvas#gameCanvas(width='960' height='540' aria-label='Aire de jeu. Déplacez votre joueur avec les flèches gauche et droite.')
       .touch-controls(aria-label='Commandes du joueur')
         button#move-left.button(type='button' aria-label='Se déplacer à gauche') ←
@@ -36,11 +44,6 @@ body
         p#autreScore
         button#terminer.button Terminer
         
-  script(type='text/javascript' src='/socket.io/socket.io.js')
-  //- script(src='/js/classes/Pointe.js')
-  //- script(src='/js/classes/Fragment.js')
-  script(src='/js/classes/Etoile.js')
-  script(src='/js/classes/Joueur.js')
   script(src='/js/jeuClient.js')
 
   include includes/footer.pug

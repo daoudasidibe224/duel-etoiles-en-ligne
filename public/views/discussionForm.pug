@@ -18,6 +18,5 @@ body
           .message-compose
             input#message.input(name='message' placeholder='Écrivez un message…' required maxlength='1000' autocomplete='off')
             button.button.is-primary(type='submit') Envoyer
-  script(src='/socket.io/socket.io.js')
   script(src='/js/discussionClient.js' defer)
   include includes/footer.pug

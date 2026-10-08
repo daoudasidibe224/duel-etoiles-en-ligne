@@ -1,18 +1,22 @@
 {
-  "name": "run-run-run",
+  "name": "duel-etoiles",
   "version": "1.1.0",
   "private": true,
   "description": "Jeu multijoueur et discussion en temps r\u00e9el",
-  "main": "server.js",
+  "main": "dist/server.js",
   "engines": {
     "node": ">=22.16.0"
   },
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
+    "start": "node dist/server.js",
+    "dev": "node scripts/dev.js",
     "css-build": "node scripts/build-css.js",
-    "test": "node --test",
-    "check": "npm run css-build && npm test"
+    "test": "tsx --test test/*.test.ts",
+    "check": "npm run lint && npm run typecheck && npm run build && npm test",
+    "build": "npm run css-build && tsc -p tsconfig.server.json && node scripts/build-client.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint src client shared server.ts",
+    "test:e2e": "node test/e2e.cjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -28,11 +32,26 @@
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
     "pug": "^3.0.4",
-    "socket.io": "^4.8.4"
+    "socket.io": "^4.8.4",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@types/connect-flash": "^0.0.40",
+    "@types/express": "^5.0.6",
+    "@types/express-session": "^1.19.0",
+    "@types/node": "^26.6.4",
+    "@types/passport": "^1.0.17",
+    "@types/passport-local": "^1.0.38",
+    "@types/supertest": "^7.2.1",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.12.0",
     "mongodb-memory-server": "^11.3.0",
+    "playwright": "^1.64.0",
+    "prettier": "^3.9.9",
+    "socket.io-client": "^4.8.4",
     "supertest": "^7.3.1",
-    "socket.io-client": "^4.8.4"
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.1"
   }
 }
