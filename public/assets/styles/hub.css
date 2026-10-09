@@ -140,6 +140,9 @@ select:focus {
   color: #006d77;
   box-shadow: none;
 }
+.navbar-item:focus-visible {
+  box-shadow: var(--focus-ring);
+}
 .navbar-start {
   gap: 8px;
 }
