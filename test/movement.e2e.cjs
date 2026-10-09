@@ -465,6 +465,14 @@ const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
         ) >= sequence,
       cancelStopSequence,
     );
+    // ACK metadata updates on receipt; the position dataset updates on the next RAF.
+    // Wait for that frame before comparing two rendered stopped positions.
+    const cancelAuthority = room.utilisateurs.find((p) => p.nomUtilisateur === "motion_nova").x;
+    await two.waitForFunction(
+      (x) => Math.abs(Number(document.querySelector("#gameCanvas").dataset.localX) - x) < 0.1,
+      cancelAuthority,
+      { timeout: 2500 },
+    );
     const cancelled = Number(
       await two.locator("#gameCanvas").getAttribute("data-local-x"),
     );
