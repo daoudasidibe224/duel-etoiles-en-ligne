@@ -15,6 +15,9 @@
     "src/**/*.ts",
     "client/**/*.ts",
     "shared/**/*.ts",
+    "games/dessin/server/**/*.ts",
+    "games/dessin/shared/**/*.ts",
+    "games/dessin/client/**/*.ts",
     "server.ts",
     "test/**/*.ts"
   ]

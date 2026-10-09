@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#eef1f4" />
+    <meta
+      name="description"
+      content="Dessine et devine dans La Salle de jeux : dessinez, devinez et marquez des points entre amis."
+    />
+    <title>Dessine et devine | La Salle de jeux</title>
+    <link rel="stylesheet" href="/dessin/assets/style.css" />
+    <script type="module" src="/dessin/assets/app.js"></script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Aller au contenu</a>
+    <header class="header">
+      <a class="brand" href="/"
+        >La Salle de jeux<span class="brand-game">Dessine et devine</span></a
+      >
+      <nav aria-label="Navigation principale">
+        <a class="nav-back" href="/">Tous les jeux</a
+        ><a href="/dessin/lobby">Les salons</a
+        ><span id="nav-identity" class="nav-identity" hidden></span
+        ><a id="profile-link" href="/profil" hidden>Mon profil</a
+        ><a
+          id="access-link"
+          data-access="guest"
+          href="/jouer?next=%2Fdessin%2Flobby"
+          >Entrer</a
+        >
+        <form id="logout-form" method="post" hidden>
+          <input id="logout-csrf" type="hidden" name="_csrf" value="" /><button
+            id="logout"
+            class="quiet"
+          >
+            Se déconnecter
+          </button>
+        </form>
+      </nav>
+    </header>
+    <main id="main">
+      <p id="initial-loading" class="initial-loading" role="status">
+        On ouvre l’atelier…
+      </p>
+      <p id="global-error" class="error" role="alert" hidden></p>
+      <button id="initial-retry" class="secondary" hidden>
+        Réessayer le chargement
+      </button>
+      <section id="guest" class="view guest-entry" hidden>
+        <p class="eyebrow">Dessin et devinettes, de 2 à 10 joueurs</p>
+        <h1>Dessine et devine</h1>
+        <p class="entry-intro">
+          Un joueur dessine, les autres trouvent le mot. Entrez dans La Salle de
+          jeux pour rejoindre un salon.
+        </p>
+        <div class="guest-sheet">
+          <a
+            class="primary full"
+            data-access="guest"
+            href="/jouer?next=%2Fdessin%2Flobby"
+            >Jouer avec un pseudo</a
+          >
+          <p class="hint">
+            Un pseudo suffit. Votre accès invité vaut pour tous les jeux du
+            site.
+          </p>
+          <div class="actions">
+            <a class="secondary" href="/connexion">Se connecter</a
+            ><a class="secondary" href="/inscription">Créer un compte</a>
+          </div>
+        </div>
+      </section>
+      <section id="lobby" class="view lobby-board" hidden>
+        <p class="eyebrow" id="welcome">Bienvenue</p>
+        <h1>Votre prochain salon</h1>
+        <div class="join-strip">
+          <h2>Créer ou rejoindre</h2>
+          <form id="lobby-form">
+            <label
+              >Nom du salon<input
+                name="room"
+                required
+                minlength="2"
+                maxlength="24"
+                placeholder="Ex. Les crayons du dimanche"
+                autocomplete="off"
+            /></label>
+            <p class="hint">
+              Un nom disponible crée un salon. Un nom déjà utilisé ouvre ce
+              salon s’il peut vous accueillir. Lettres, chiffres, espaces et
+              tirets.
+            </p>
+            <p id="lobby-error" class="error" role="alert" hidden></p>
+            <button class="primary full">
+              Entrer dans le salon <span aria-hidden="true">↗</span>
+            </button>
+          </form>
+        </div>
+        <section class="room-directory" aria-labelledby="directory-title">
+          <div class="directory-heading">
+            <div>
+              <p class="eyebrow">En direct</p>
+              <h2 id="directory-title">Les salons ouverts</h2>
+            </div>
+            <label
+              ><span class="sr-only">Rechercher un salon</span
+              ><input
+                id="room-search"
+                type="search"
+                placeholder="Rechercher un salon"
+            /></label>
+          </div>
+          <p id="directory-status" role="status">Chargement des salons…</p>
+          <p id="directory-error" class="error" role="alert" hidden></p>
+          <div id="room-directory"></div>
+        </section>
+        <section id="recent-rooms" class="recent-rooms" hidden>
+          <h2>Vos derniers salons</h2>
+          <div id="recent-links"></div>
+          <button id="forget-rooms" class="quiet" type="button">
+            Oublier ces salons sur cet appareil
+          </button>
+        </section>
+        <div class="lobby-rules">
+          <p><b>2 à 10 joueurs</b><br />Le premier arrivé devient l’hôte.</p>
+          <p><b>30 à 120 secondes</b><br />Chacun dessine à son tour.</p>
+          <p><b>Une identité, une place</b><br />Un seul salon à la fois.</p>
+        </div>
+        <p class="hint privacy">
+          Le même nom mène au même salon. Les joueurs qui connaissent son nom
+          peuvent le rejoindre.
+        </p>
+      </section>
+      <section id="game" class="view" hidden>
+        <div class="game-heading">
+          <div>
+            <p class="eyebrow">Atelier ouvert</p>
+            <h1 id="room-title">Le salon</h1>
+          </div>
+          <div class="actions">
+            <button id="invite" class="secondary">Copier l'invitation</button
+            ><button id="leave" class="quiet">Quitter le salon</button>
+          </div>
+        </div>
+        <p id="network" class="network" role="status">Connexion au salon…</p>
+        <p id="game-error" class="error" role="alert" hidden></p>
+        <button id="resume" class="secondary" hidden>
+          Reprendre ma place ici
+        </button>
+        <div class="game-grid">
+          <div class="drawing-column">
+            <div class="match-settings">
+              <form id="start-form" hidden>
+                <label
+                  >Tours par joueur<select name="rounds">
+                    <option value="1">1 tour</option>
+                    <option value="2" selected>2 tours</option>
+                    <option value="3">3 tours</option>
+                    <option value="4">4 tours</option>
+                    <option value="5">5 tours</option>
+                  </select></label
+                ><label
+                  >Durée du dessin<select name="seconds">
+                    <option value="30">30 secondes</option>
+                    <option value="60" selected>60 secondes</option>
+                    <option value="90">90 secondes</option>
+                    <option value="120">120 secondes</option>
+                  </select></label
+                ><button id="start" class="primary full">
+                  Lancer la partie
+                </button>
+              </form>
+
+              <p id="waiting-note" class="hint"></p>
+              <p class="hint scoring">
+                Bonne réponse : 100 points + le temps restant. Le dessinateur
+                gagne 50 points.
+              </p>
+            </div>
+            <section class="canvas-panel">
+              <div class="round-bar">
+                <p id="phase">En attente des joueurs</p>
+                <span id="round"></span><span id="timer" class="clock">—</span>
+              </div>
+              <div id="word-panel" class="word-panel">
+                <strong id="word">Invitez un ami pour commencer.</strong>
+                <div
+                  id="choices"
+                  class="choices"
+                  role="group"
+                  aria-label="Choisir le mot à dessiner"
+                ></div>
+              </div>
+              <div class="canvas-wrap">
+                <canvas
+                  id="drawing"
+                  aria-label="Toile du salon. Le dessin se fait avec la souris ou le doigt."
+                  tabindex="0"
+                ></canvas
+                ><span id="canvas-note">La toile vous attend.</span>
+              </div>
+              <div id="toolbar" class="toolbar">
+                <fieldset id="drawing-tools" disabled>
+                  <legend class="sr-only">Outils de dessin</legend>
+                  <label class="shape-control"
+                    >Outil<select id="drawing-tool">
+                      <option value="pen">Crayon libre</option>
+                      <option value="line">Ligne droite</option>
+                      <option value="rectangle">Rectangle</option>
+                      <option value="ellipse">Ellipse</option>
+                    </select></label
+                  >
+                  <div
+                    class="swatches"
+                    role="group"
+                    aria-label="Palette tactile"
+                  >
+                    <button
+                      type="button"
+                      class="swatch swatch-bleu"
+                      data-color="#1f3b63"
+                      aria-label="Crayon bleu"
+                      aria-pressed="true"
+                    >
+                      <span aria-hidden="true">✎</span></button
+                    ><button
+                      type="button"
+                      class="swatch swatch-corail"
+                      data-color="#df6151"
+                      aria-label="Crayon corail"
+                      aria-pressed="false"
+                    >
+                      <span aria-hidden="true">✎</span></button
+                    ><button
+                      type="button"
+                      class="swatch swatch-vert"
+                      data-color="#4c966f"
+                      aria-label="Crayon vert"
+                      aria-pressed="false"
+                    >
+                      <span aria-hidden="true">✎</span></button
+                    ><button
+                      type="button"
+                      class="swatch swatch-jaune"
+                      data-color="#e9b44c"
+                      aria-label="Crayon jaune"
+                      aria-pressed="false"
+                    >
+                      <span aria-hidden="true">✎</span></button
+                    ><button
+                      type="button"
+                      class="swatch swatch-violet"
+                      data-color="#7859a4"
+                      aria-label="Crayon violet"
+                      aria-pressed="false"
+                    >
+                      <span aria-hidden="true">✎</span></button
+                    ><button
+                      type="button"
+                      class="swatch swatch-gomme"
+                      data-color="#ffffff"
+                      aria-label="Crayon gomme"
+                      aria-pressed="false"
+                    >
+                      <span aria-hidden="true">✎</span>
+                    </button>
+                  </div>
+                  <label
+                    >Couleur<select id="color">
+                      <option value="#1f3b63">Bleu</option>
+                      <option value="#df6151">Corail</option>
+                      <option value="#4c966f">Vert</option>
+                      <option value="#e9b44c">Jaune</option>
+                      <option value="#7859a4">Violet</option>
+                      <option value="#ffffff">Gomme</option>
+                    </select></label
+                  ><label
+                    >Épaisseur<input
+                      id="width"
+                      type="range"
+                      min="1"
+                      max="30"
+                      value="10" /></label
+                  ><button id="undo" type="button" class="tool">
+                    Annuler le trait</button
+                  ><button id="redo" type="button" class="tool">
+                    Rétablir le trait</button
+                  ><button id="clear" type="button" class="tool danger">
+                    Effacer
+                  </button>
+                </fieldset>
+              </div>
+              <div id="canvas-actions" class="canvas-actions" hidden>
+                <button id="export" class="tool" type="button" hidden>
+                  Exporter PNG
+                </button>
+                <button id="skip-turn" class="quiet" type="button" hidden>
+                  Passer mon tour
+                </button>
+              </div>
+            </section>
+          </div>
+          <aside class="salon-sidebar">
+            <section class="score-strip" aria-label="Joueurs et scores">
+              <div class="panel-heading">
+                <h2>La bande</h2>
+                <span id="player-count" class="pill">0 / 10</span>
+              </div>
+              <ol id="players"></ol>
+            </section>
+            <section class="chat-panel">
+              <div class="panel-heading">
+                <h2>Le salon</h2>
+                <span aria-hidden="true">↗</span>
+              </div>
+              <div
+                id="messages"
+                class="messages"
+                role="log"
+                aria-live="polite"
+                aria-label="Messages du salon"
+              ></div>
+              <form id="answer-form" hidden>
+                <label for="answer">Votre réponse</label>
+                <div class="answer-input">
+                  <input
+                    id="answer"
+                    name="message"
+                    required
+                    maxlength="200"
+                    autocomplete="off"
+                    placeholder="Quel est le mot ?"
+                  /><button class="primary" aria-label="Proposer la réponse">
+                    Proposer
+                  </button>
+                </div>
+              </form>
+              <p id="answer-status" class="hint" role="status"></p>
+              <form id="chat-form">
+                <label class="sr-only" for="guess">Votre idée ou message</label
+                ><input
+                  id="guess"
+                  name="message"
+                  required
+                  maxlength="200"
+                  placeholder="Un mot, une idée…"
+                  autocomplete="off"
+                /><button class="primary" aria-label="Envoyer le message">
+                  ↗
+                </button>
+              </form>
+              <p class="hint">
+                Discussion entre les manches. Pendant le dessin, seul le champ
+                réponse permet de proposer un mot.
+              </p>
+            </section>
+          </aside>
+        </div>
+        <details class="round-gallery">
+          <summary>
+            Carnet des manches <span id="gallery-count">0</span>
+          </summary>
+          <p class="hint">
+            Les mots et dessins apparaissent après leur révélation. Le salon
+            conserve jusqu’à six manches. Son carnet disparaît quand tout le
+            monde quitte ou quand le serveur redémarre.
+          </p>
+          <div id="gallery"></div>
+        </details>
+        <p id="game-notice" class="sr-only" aria-live="polite"></p>
+      </section>
+    </main>
+    <footer>
+      <a href="/">La Salle de jeux</a>
+      <span>Un mot à trouver, un trait à partager.</span>
+    </footer>
+  </body>
+</html>

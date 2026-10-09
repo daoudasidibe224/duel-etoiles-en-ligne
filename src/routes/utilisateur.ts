@@ -93,6 +93,10 @@ router.post(
         { nomUtilisateur: nomUtilisateur.trim().toLowerCase() },
         { runValidators: true },
       );
+      req.app.renameDrawingPlayer?.(
+        authenticatedUser(req).id,
+        nomUtilisateur.trim().toLowerCase(),
+      );
       req.flash("msg_succes", "Votre pseudo a été modifié.");
       res.redirect("/profil");
     } catch (error) {

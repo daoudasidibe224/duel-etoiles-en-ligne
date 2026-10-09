@@ -1,0 +1,13 @@
+{
+  "name": "dessine-et-devine",
+  "version": "3.0.0",
+  "description": "Dessine et devine, module de La Salle de jeux. Les dépendances sont celles du dépôt racine.",
+  "private": true,
+  "scripts": {
+    "check": "tsc -p tsconfig.json",
+    "lint": "eslint server client shared test scripts",
+    "build:client": "esbuild client/main.ts --bundle --format=esm --minify --target=es2022 --outfile=public/app.js",
+    "test": "tsx --test test/*.test.ts",
+    "test:e2e": "npm run build:client && playwright test"
+  }
+}

@@ -7,7 +7,7 @@ body
         span ACCÈS DIRECT
         span.system-light Sans inscription
       h1#form-title Jouer maintenant
-      p.muted Deux joueurs, 90 secondes. Choisissez votre pseudo.
+      p.muted Choisissez votre pseudo. Il vous suit dans les deux jeux.
       include includes/messages.pug
       form(action='/utilisateur/invite' method='post')
         input(type='hidden' name='_csrf' value=csrfToken)

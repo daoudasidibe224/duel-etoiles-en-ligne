@@ -7,6 +7,6 @@
     "outDir": "dist",
     "rootDir": "."
   },
-  "include": ["src/**/*.ts", "shared/**/*.ts", "server.ts"],
+  "include": ["src/**/*.ts", "shared/**/*.ts", "games/dessin/server/**/*.ts", "games/dessin/shared/**/*.ts", "server.ts"],
   "exclude": ["client", "test"]
 }

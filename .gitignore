@@ -7,3 +7,6 @@ dist/
 public/js/
 
 test-results/
+games/dessin/public/app.js
+games/dessin/test-results/
+games/dessin/playwright-report/

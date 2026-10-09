@@ -47,6 +47,8 @@ declare module "express-serve-static-core" {
     releasePlayer: (id: string, sessionId?: string) => Promise<void>;
     roomSessions: Map<string, string>;
     roomJournal?: import("./services/roomJournal").RoomJournal;
+    releaseDrawingSession?: (sessionId: string) => Promise<void>;
+    renameDrawingPlayer?: (id: string, name: string) => void;
   }
 }
 declare module "http" {
@@ -79,13 +81,14 @@ export function sessionId(req: Request): string {
 }
 export async function revokeAccess(req: Request) {
   req.app.identities.revoke(sessionId(req));
+  await req.app.releaseDrawingSession?.(sessionId(req));
   const ids = new Set(
     [req.user?.id, req.session.guest?.id].filter((id): id is string =>
       Boolean(id),
     ),
   );
   for (const id of ids) await req.app.releasePlayer(id, req.sessionID);
-  for (const name of ["/", "/jeu", "/discussion"]) {
+  for (const name of ["/", "/jeu", "/discussion", "/dessin"]) {
     for (const socket of req.app.io.of(name).sockets.values()) {
       if (socket.request.sessionID === req.sessionID) {
         socket.emit(

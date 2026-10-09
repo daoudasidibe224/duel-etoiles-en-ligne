@@ -3,7 +3,14 @@ import { Router } from "express";
 const router = Router();
 import { authentifie, assurerAuthentification } from "../config/auth";
 import Score from "../models/Score";
-router.get("/", (req, res) => res.redirect("/jouer"));
+router.get("/", (_req, res) => res.render("accueil"));
+router.get("/duel", (_req, res) => res.redirect("/salon"));
+router.use(["/jouer", "/connexion", "/inscription"], (req, _res, next) => {
+  const target = req.query.next;
+  if (target === "/dessin/lobby" || target === "/salon")
+    req.session.returnTo = target;
+  next();
+});
 router.get("/jouer", (req, res) => {
   if (
     req.app.identities.resolve(
@@ -13,7 +20,7 @@ router.get("/jouer", (req, res) => {
       req.session.cookie.expires?.getTime(),
     )
   )
-    return res.redirect("/salon");
+    return res.redirect(req.session.returnTo || "/salon");
   res.render("jouer");
 });
 router.get("/connexion", authentifie, (req, res) => res.render("connexion"));

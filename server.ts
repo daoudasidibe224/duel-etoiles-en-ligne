@@ -23,10 +23,11 @@ export async function start() {
     collectionName: "sessions",
   });
   const roomJournal = RoomJournal.prepare();
-  const { server, io } = createApp({
+  const { server, io, drawing } = createApp({
     secret: process.env.SECRET,
     store,
     roomJournal,
+    enableDrawing: true,
   });
   const retry = setInterval(() => {
     if (roomJournal.available) void recoverResults().catch(() => {});
@@ -42,7 +43,7 @@ export async function start() {
     void close().catch((failure) => console.error(failure.message));
   });
   server.listen(port, "0.0.0.0", () =>
-    console.log(`Jeu disponible sur http://localhost:${port}`),
+    console.log(`La Salle de jeux est disponible sur http://localhost:${port}`),
   );
   const connections = new Set<Socket>();
   server.on("connection", (socket) => {
@@ -55,6 +56,7 @@ export async function start() {
     closing = true;
     clearInterval(retry);
     try {
+      await drawing?.rooms.close();
       await roomJournal.close();
     } finally {
       const deadline = setTimeout(() => {

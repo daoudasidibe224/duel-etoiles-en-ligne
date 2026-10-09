@@ -1,24 +1,26 @@
 a.skip-link(href='#contenu') Aller au contenu
 header.navbar.arcade-system(class=authCompact ? 'auth-header' : undefined)
   .navbar-brand
-    a.brand(href=joueur ? '/salon' : '/jouer' aria-label='Duel d’étoiles en ligne, accueil')
+    a.brand(href='/' aria-label='La Salle de jeux, accueil')
       span.brand-icon(aria-hidden='true') ✦
-      span Duel d’étoiles en ligne
-    span.arcade-caption Arcade à deux joueurs
+      span La Salle de jeux
+    span.arcade-caption À plusieurs, c’est mieux
     button.navbar-burger(type='button' data-target='navMenubd' aria-controls='navMenubd' aria-expanded='false' aria-label='Ouvrir le menu')
       span(aria-hidden='true')
       span(aria-hidden='true')
       span(aria-hidden='true')
   .command-row
-    nav#navMenubd.navbar-menu(aria-label='Commandes de l’arcade')
+    nav#navMenubd.navbar-menu(aria-label='Navigation')
       .navbar-start
+        a.navbar-item(href='/' aria-current=currentPath === '/' ? 'page' : undefined) Tous les jeux
         if joueur
-          a.navbar-item(href='/salon' aria-current=currentPath === '/salon' ? 'page' : undefined) Salons de jeu
+          a.navbar-item(href='/salon' aria-current=currentPath === '/salon' ? 'page' : undefined) Duel d’étoiles
+          a.navbar-item(href='/dessin/lobby') Dessine et devine
           a.navbar-item(href='/salon/discussion&jeu' aria-current=currentPath === '/salon/discussion&jeu' ? 'page' : undefined) Discussion
           if joueur.kind === 'account'
             a.navbar-item(href='/stats' aria-current=currentPath === '/stats' ? 'page' : undefined) Historique des scores
           else
-            a.navbar-item(href='/connexion') Compte et scores durables
+            a.navbar-item(href='/connexion') Mon compte
         else
           a.navbar-item(href='/jouer' aria-current=currentPath === '/jouer' ? 'page' : undefined) Jouer par pseudo
           a.navbar-item(href='/connexion' aria-current=currentPath === '/connexion' ? 'page' : undefined) Connexion compte

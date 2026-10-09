@@ -14,12 +14,26 @@ const options = {
   format: "iife",
   minify: true,
 };
+const drawingOptions = {
+  entryPoints: ["games/dessin/client/main.ts"],
+  outfile: "games/dessin/public/app.js",
+  bundle: true,
+  platform: "browser",
+  target: "es2022",
+  format: "esm",
+  minify: true,
+};
 if (process.argv.includes("--watch"))
-  esbuild
-    .context(options)
-    .then((context) => context.watch())
-    .catch((error) => {
-      console.error(error);
-      process.exitCode = 1;
-    });
-else esbuild.buildSync(options);
+  Promise.all(
+    [options, drawingOptions].map(async (configuration) => {
+      const context = await esbuild.context(configuration);
+      await context.watch();
+    }),
+  ).catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+else {
+  esbuild.buildSync(options);
+  esbuild.buildSync(drawingOptions);
+}

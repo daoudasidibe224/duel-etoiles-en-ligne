@@ -1,0 +1,33 @@
+include includes/head.pug
+body.hub-page
+  include includes/header.pug
+  main#contenu.hub-shell
+    section.hub-intro(aria-labelledby='hub-title')
+      p.hub-kicker Le plaisir de jouer ensemble
+      h1#hub-title Faites une pause.
+        br
+        span Lancez une partie.
+      p.hub-description Un dessin à deviner, des étoiles à attraper. Choisissez votre jeu et invitez vos amis.
+      if joueur
+        p.hub-access Connecté en tant que #[strong #{joueur.nomUtilisateur}]. Votre accès fonctionne dans les deux jeux.
+      else
+        p.hub-access Un pseudo suffit pour jouer. Le compte est facultatif.
+    section.hub-games(aria-label='Choisir un jeu')
+      article.hub-game.hub-drawing
+        .hub-art(aria-hidden='true')
+          img(src='/images/drawing-card.svg' alt='' width='400' height='230')
+        .hub-game-content
+          p.hub-format De 2 à 10 joueurs
+          h2 Dessine et devine
+          p Dessinez un mot. Les autres le trouvent. À chaque tour, le crayon change de main.
+          a.button.hub-play(href=joueur ? '/dessin/lobby' : '/jouer?next=/dessin/lobby') Jouer au dessin #[span(aria-hidden='true') ↗]
+      article.hub-game.hub-stars
+        .hub-art(aria-hidden='true')
+          img(src='/images/stars-card.svg' alt='' width='400' height='230')
+        .hub-game-content
+          p.hub-format 2 joueurs · 90 secondes
+          h2 Duel d’étoiles
+          p Ramassez les étoiles, attrapez les bonus et esquivez les obstacles. Le meilleur score gagne.
+          a.button.hub-play(href=joueur ? '/salon' : '/jouer?next=/salon') Jouer au duel #[span(aria-hidden='true') ↗]
+    p.hub-note Sur ordinateur ou téléphone. Invitez vos amis avec le lien de votre salon.
+  include includes/footer.pug

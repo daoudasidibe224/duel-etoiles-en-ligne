@@ -27,6 +27,8 @@ import roomRoutes from "./routes/salon";
 import type { ClientEvents, ServerEvents } from "../shared/contracts";
 import { z } from "zod";
 import "./types";
+import Utilisateur from "./models/Utilisateur";
+import { attachDrawing } from "../games/dessin/server/integration";
 export function createApp({
   secret,
   store,
@@ -34,6 +36,7 @@ export function createApp({
   guestDurationMs,
   sessionDurationMs,
   roomJournal,
+  enableDrawing = false,
 }: {
   secret: string;
   store?: session.Store;
@@ -45,6 +48,7 @@ export function createApp({
   guestDurationMs?: number;
   sessionDurationMs?: number;
   roomJournal?: RoomJournal;
+  enableDrawing?: boolean;
 }) {
   if (!secret || secret.length < 32)
     throw new Error(
@@ -114,6 +118,7 @@ export function createApp({
   io.engine.use(handshakeOnly(authenticate));
   app.identities = new IdentityAuthority(guestDurationMs, (id, sessionId) => {
     app.releasePlayer(id, sessionId);
+    void app.releaseDrawingSession?.(sessionId);
     for (const name of ["/", "/jeu", "/discussion"])
       for (const socket of io.of(name).sockets.values()) {
         if (
@@ -315,6 +320,52 @@ export function createApp({
   app.use("/", indexRoutes);
   app.use("/utilisateur", userRoutes);
   app.use("/salon", roomRoutes);
+  const drawing = enableDrawing
+    ? attachDrawing({
+        app,
+        server,
+        io,
+        publicDirectory: path.resolve(
+          publicDirectory,
+          "../games/dessin/public",
+        ),
+        logout: (request) => ({
+          action: "/utilisateur/deconnexion",
+          csrf: request.session.csrfToken || "",
+        }),
+        resolveIdentity: async (request) => {
+          const accountSession = z
+            .object({ passport: z.object({ user: z.string() }) })
+            .safeParse(request.session);
+          const account = accountSession.success
+            ? await Utilisateur.findById(accountSession.data.passport.user)
+            : undefined;
+          if (accountSession.success && !account) return;
+          const identity = app.identities.resolve(
+            request.sessionID,
+            account ?? undefined,
+            request.session.guest,
+            request.session.cookie.expires?.getTime(),
+          );
+          return identity
+            ? {
+                id: identity.id,
+                name: identity.nomUtilisateur,
+                kind: identity.kind,
+                expiresAt: identity.expiresAt,
+              }
+            : undefined;
+        },
+      })
+    : undefined;
+  if (drawing) {
+    app.releaseDrawingSession = async (id) => {
+      drawing.endSession(id);
+    };
+    app.renameDrawingPlayer = (id, name) =>
+      drawing.rename({ id, kind: "account" }, name);
+    app.locals.drawingReady = () => drawing.rooms.healthy;
+  }
   app.use((req, res) =>
     res.status(404).render("erreur", {
       titre: "Page introuvable",
@@ -330,5 +381,5 @@ export function createApp({
     });
   };
   app.use(onError);
-  return { app, server, io };
+  return { app, server, io, drawing };
 }

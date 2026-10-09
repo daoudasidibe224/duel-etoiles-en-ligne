@@ -14,6 +14,8 @@ export function registerHealth(app: Express) {
       try {
         if (requireEngine && app.roomJournal && !app.roomJournal.available)
           throw new Error("Moteur de salons indisponible");
+        if (requireEngine && app.locals.drawingReady && !app.locals.drawingReady())
+          throw new Error("Moteur de dessin indisponible");
         const db = mongoose.connection.db;
         if (mongoose.connection.readyState !== 1 || !db)
           throw new Error("Base indisponible");

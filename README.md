@@ -1,10 +1,22 @@
-# Duel d’étoiles en ligne
+# La Salle de jeux
 
 [Essayer la démo publique](https://duel-etoiles-en-ligne.onrender.com). Le premier chargement peut prendre environ une minute après la mise en veille du service gratuit.
 
-Un jeu d’arcade à deux joueurs, avec des salons en temps réel, une discussion générale et un historique de scores pour les comptes. Ouvrez une partie, attendez un second joueur et lancez une manche de 90 secondes. Les étoiles ramassées font monter le score.
+Deux jeux multijoueurs dans un même site : **Dessine et devine**, pour faire deviner des mots à ses amis, et **Duel d’étoiles**, une course aux étoiles à deux. Choisissez un pseudo ou créez un compte, puis passez d’un jeu à l’autre avec la même session.
 
-## Fonctionnalités
+L’accueil et les écrans utilisent une interface claire aux reliefs doux, avec des accents turquoise et corail. Les commandes restent identifiables au clavier et au toucher.
+
+## Dessine et devine
+
+- Salons de deux à dix joueurs, invitation par lien et annuaire en direct.
+- Choix du mot réservé au dessinateur ; les autres joueurs voient seulement les indices.
+- Pinceau, gomme, formes, couleurs, annulation, rétablissement et export PNG.
+- Tours chronométrés, réponses validées par le serveur, scores et carnet des manches.
+- Reconnexion avec toile conservée, reprise exclusive de sa place et restauration après redémarrage.
+
+Le module est dans `games/dessin/`. Il utilise le serveur, la base, les sessions et les comptes de la racine ; il ne possède pas de serveur d’authentification indépendant. Ses données et son verrou de moteur utilisent des collections MongoDB distinctes de celles du Duel.
+
+## Duel d’étoiles
 
 - Accès principal par pseudo, sans inscription : identité générée par le serveur, session invitée de 8 heures et score visible en fin de partie.
 - Compte facultatif pour conserver les résultats ; inscription avec email et mot de passe, pseudo facultatif proposé automatiquement, visibilité du mot de passe et déconnexion qui révoque la session.
@@ -22,11 +34,11 @@ Un jeu d’arcade à deux joueurs, avec des salons en temps réel, une discussio
 
 ## Stack
 
-Node.js 22.16 ou supérieur, Express 5, Pug 3, Socket.IO 4, MongoDB avec Mongoose 9, Passport 0.7 et CSS natif. Les sessions sont stockées dans MongoDB avec `connect-mongo`. Le serveur et les clients utilisent TypeScript strict. Canvas affiche la partie ; esbuild compile les scripts du navigateur. Les contrats Zod contrôlent les événements entrants sur le serveur et le client.
+Node.js 24.15 ou supérieur, Express 5, Pug 3, Socket.IO 4, MongoDB avec Mongoose 9, Passport 0.7 et CSS natif. Les sessions sont stockées dans MongoDB avec `connect-mongo`. Le serveur et les clients utilisent TypeScript strict. Canvas affiche la partie ; esbuild compile les scripts du navigateur. Les contrats Zod contrôlent les événements entrants sur le serveur et le client.
 
 ## Installation
 
-MongoDB 8 convient au développement local. Vous pouvez aussi utiliser une instance compatible accessible par une URI MongoDB. Aucune base ni aucun compte n’est fourni dans le dépôt.
+MongoDB 8 convient au développement local. Pour démarrer uniquement la base locale : `docker compose up -d database`. Elle écoute sur votre machine et conserve ses données dans un volume Docker. Vous pouvez aussi utiliser une instance compatible accessible par une URI MongoDB. Aucune base ni aucun compte n’est fourni dans le dépôt.
 
 ```sh
 npm ci
@@ -41,7 +53,7 @@ npm run build
 npm start
 ```
 
-Ouvrez [http://localhost:5000](http://localhost:5000). Choisissez un pseudo dans deux navigateurs ou deux profils distincts pour jouer sans compte. Créez un compte si vous souhaitez conserver vos scores. Le serveur refuse de démarrer si la configuration manque ou si MongoDB est inaccessible.
+Ouvrez [http://localhost:5000](http://localhost:5000). Choisissez un jeu sur l’accueil, puis un pseudo dans deux navigateurs ou deux profils distincts pour jouer sans compte. Créez un compte si vous souhaitez conserver vos scores. Le serveur refuse de démarrer si la configuration manque ou si MongoDB est inaccessible.
 
 ## Scripts
 
@@ -56,7 +68,7 @@ Ouvrez [http://localhost:5000](http://localhost:5000). Choisissez un pseudo dans
 | `npm run lint`      | Vérifier le code TypeScript                                          |
 | `npm run check`     | Vérifier le lint, les types, la compilation et les tests             |
 
-Les tests utilisent une vraie instance MongoDB temporaire via `mongodb-memory-server`. Le premier lancement télécharge le binaire MongoDB et nécessite un accès réseau. Ils vérifient les accès protégés, les formulaires, les comptes, les profils, l’unicité des places, les reconnexions, les départs répétés, les événements anciens ou désordonnés, les résultats uniques, la progression, les étoiles partagées, les contacts répétés après reprise, les obstacles, le bouclier, l’aimant et le ralentissement et la discussion sans doublon. Un parcours Chromium mesure la traversée, le chevauchement, le saut immédiat, le maintien sans répétition, les appuis tactiles, l’inversion, l’arrêt et la fin avec une commande encore active. Il injecte des délais variables de 75 à 187 ms par sens, avec au moins 150 ms d’aller-retour WebSocket et attend la séquence acceptée avant de vérifier la convergence. Les autres parcours Chromium jouent une manche complète avec deux comptes, ouvrent des onglets du même compte et reprennent une partie après une coupure réseau suivie d’un rechargement. Un parcours de redémarrage arrête brutalement le vrai processus serveur en attente puis à chacune des trois étapes. Il vérifie le même identifiant de salon et les deux places restaurées, les annulations dans Chromium et Socket.IO, les identités invitée et compte conservées, la reprise du résultat terminé, la coexistence d’un ancien moteur et d’un nouveau HTTP en attente, puis l’arrêt de l’ancien et le rattachement automatique. Il couvre aussi le refus d’une instance bloquante, la perte du verrou et un résultat partiellement enregistré repris sans doublon. Un second parcours crée deux véritables invités sans compte, teste une manche de 9 secondes, les reprises, la conversion en compte, les accès refusés, l’expiration et la navigation entre onglets. La CI exécute les contrôles et les parcours navigateur sous Node.js 22.
+Les tests utilisent une vraie instance MongoDB temporaire via `mongodb-memory-server`. Le premier lancement télécharge le binaire MongoDB et nécessite un accès réseau. Ils vérifient les accès protégés, les formulaires, les comptes, les profils, l’unicité des places, les reconnexions, les départs répétés, les événements anciens ou désordonnés, les résultats uniques, la progression, les étoiles partagées, les contacts répétés après reprise, les obstacles, le bouclier, l’aimant et le ralentissement et la discussion sans doublon. Un parcours Chromium mesure la traversée, le chevauchement, le saut immédiat, le maintien sans répétition, les appuis tactiles, l’inversion, l’arrêt et la fin avec une commande encore active. Il injecte des délais variables de 75 à 187 ms par sens, avec au moins 150 ms d’aller-retour WebSocket et attend la séquence acceptée avant de vérifier la convergence. Les autres parcours Chromium jouent une manche complète avec deux comptes, ouvrent des onglets du même compte et reprennent une partie après une coupure réseau suivie d’un rechargement. Un parcours de redémarrage arrête brutalement le vrai processus serveur en attente puis à chacune des trois étapes. Il vérifie le même identifiant de salon et les deux places restaurées, les annulations dans Chromium et Socket.IO, les identités invitée et compte conservées, la reprise du résultat terminé, la coexistence d’un ancien moteur et d’un nouveau HTTP en attente, puis l’arrêt de l’ancien et le rattachement automatique. Il couvre aussi le refus d’une instance bloquante, la perte du verrou et un résultat partiellement enregistré repris sans doublon. Un second parcours crée deux véritables invités sans compte, teste une manche de 9 secondes, les reprises, la conversion en compte, les accès refusés, l’expiration et la navigation entre onglets. La CI exécute les contrôles et les parcours navigateur sous Node.js 24.
 
 ## Règles de connexion et de manche
 
@@ -76,7 +88,7 @@ Les pages relisent l’accès courant à l’activation de l’onglet, à l’ex
 
 ## Interface et fontes
 
-Le lobby présente l’arène, la création de salon et les parties disponibles. La page de jeu contient un seul cadre : les deux scores, le chrono, les effets, le terrain et les commandes. Le départ et les résultats apparaissent dans un panneau intégré ; les règles s’ouvrent à la demande. Le propriétaire peut rejouer une manche dans le même salon après la sauvegarde du résultat, si les deux joueurs sont connectés. La navigation sépare les commandes de jeu et l’accès du joueur. Press Start 2P et Chakra Petch sont servis localement. Les fichiers et leurs licences SIL Open Font License proviennent du [répertoire officiel Google Fonts](https://github.com/google/fonts) et figurent dans `public/assets/fonts/`.
+Le lobby présente l’arène, la création de salon et les parties disponibles. La page de jeu contient un seul cadre : les deux scores, le chrono, les effets, le terrain et les commandes. Le départ et les résultats apparaissent dans un panneau intégré ; les règles s’ouvrent à la demande. Le propriétaire peut rejouer une manche dans le même salon après la sauvegarde du résultat, si les deux joueurs sont connectés. La navigation sépare les commandes de jeu et l’accès du joueur. Nunito Sans est servie localement pour l’interface commune ; les ressources typographiques conservées par les jeux sont aussi locales. Les fichiers et leurs licences SIL Open Font License proviennent du [répertoire officiel Google Fonts](https://github.com/google/fonts) et figurent dans `public/assets/fonts/`.
 
 ## Configuration et limites
 
@@ -100,11 +112,11 @@ Les tests navigateur démarrent leur propre serveur et MongoDB locale temporaire
 
 ## Exécution dans un conteneur
 
-Le [dépôt public](https://github.com/daoudasidibe224/duel-etoiles-en-ligne) garde le serveur HTTP et Socket.IO dans le même processus. Le Dockerfile compile TypeScript puis installe uniquement les dépendances d’exécution ; le processus tourne avec l’utilisateur non privilégié `node`.
+Le [dépôt public](https://github.com/daoudasidibe224/salle-de-jeux) garde le serveur HTTP et Socket.IO dans le même processus. Le Dockerfile compile TypeScript puis installe uniquement les dépendances d’exécution ; le processus tourne avec l’utilisateur non privilégié `node`.
 
 ```sh
-docker build -t duel-etoiles-en-ligne .
-docker run --rm --env-file .env -e NODE_ENV=production -p 5000:5000 duel-etoiles-en-ligne
+docker build -t salle-de-jeux .
+docker run --rm --env-file .env -e NODE_ENV=production -p 5000:5000 salle-de-jeux
 ```
 
 Ce conteneur attend une base MongoDB accessible depuis son réseau. `localhost` dans l’URI désigne le conteneur, pas votre ordinateur. Le port interne suit `PORT`, compris entre 1 et 65535. `GET /health/live` vérifie le processus ; `GET /health/ready` vérifie MongoDB et le moteur exclusif ; il renvoie 503 si l’un est indisponible. `GET /health/deploy` vérifie uniquement l’infrastructure MongoDB et indique séparément `engine: waiting`, `ready` ou `unavailable`. Ces sondes ne créent pas de session. La CI construit aussi l’image.
