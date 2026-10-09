@@ -361,6 +361,35 @@ select:focus {
 .room-row .button {
   min-height: 44px;
 }
+.room-row .room-recovery-note {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+.room-row:has(.room-recovery-note) .room-title {
+  grid-column: 1;
+  grid-row: 2;
+}
+.room-row:has(.room-recovery-note) > span {
+  grid-column: 2;
+  grid-row: 2;
+}
+.room-row:has(.room-recovery-note) .button {
+  grid-column: 3;
+  grid-row: 2;
+}
+@media (max-width: 600px) {
+  .room-row:has(.room-recovery-note) > span {
+    grid-column: 1;
+    grid-row: 3;
+  }
+  .room-row:has(.room-recovery-note) .button {
+    grid-column: 2;
+    grid-row: 2 / 4;
+  }
+}
 .match-facts {
   gap: 8px;
   flex-wrap: wrap;

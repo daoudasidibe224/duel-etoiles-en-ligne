@@ -78,6 +78,7 @@ client.on("majSalonDeJeu", (payload) => {
     const row = document.createElement("article");
     row.className = "room-row";
     const title = document.createElement("p");
+    title.className = "room-title";
     title.textContent = `Salon de ${room.nomProprietaire}`;
     const count = document.createElement("span");
     count.textContent = `${room.utilisateurs.length}/2 joueurs`;
@@ -91,6 +92,7 @@ client.on("majSalonDeJeu", (payload) => {
         : "Rejoindre →";
     if (room.recoveryNotice) {
       const notice = document.createElement("p");
+      notice.className = "room-recovery-note";
       notice.textContent = room.recoveryNotice;
       row.append(notice);
     }
