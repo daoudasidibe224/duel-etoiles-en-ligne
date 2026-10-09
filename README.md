@@ -1,5 +1,7 @@
 # Duel d’étoiles en ligne
 
+[Essayer la démo publique](https://duel-etoiles-en-ligne.onrender.com). Le premier chargement peut prendre environ une minute après la mise en veille du service gratuit.
+
 Un jeu d’arcade à deux joueurs, avec des salons en temps réel, une discussion générale et un historique de scores pour les comptes. Ouvrez une partie, attendez un second joueur et lancez une manche de 90 secondes. Les étoiles ramassées font monter le score.
 
 ## Fonctionnalités
@@ -107,7 +109,7 @@ Ce conteneur attend une base MongoDB accessible depuis son réseau. `localhost` 
 
 Pour une publication, configurez `SECRET`, `MONGODB_URI`, `NODE_ENV=production` et le port demandé par l’hébergeur. Servez les pages et Socket.IO sous la même origine HTTPS, avec un proxy qui accepte la mise à niveau WebSocket. Le serveur refuse un handshake navigateur provenant d’une autre origine ; aucune ouverture CORS générale n’est nécessaire. Activez `TRUST_PROXY=1` uniquement derrière un proxy de confiance. La configuration du cookie sécurisé ne doit pas être désactivée en production.
 
-La base doit offrir un stockage durable indépendant du disque du conteneur. Une offre qui met le processus en veille ou le redémarre interrompt les connexions. Le journal annule les manches interrompues explicitement et permet de retrouver les résultats déjà terminés. L’image seule ne fournit ni base distante ni domaine ni certificat ; un Blueprint Render est préparé, mais aucun service distant n’a été créé. Une seule instance applicative est nécessaire avec l’architecture actuelle.
+La base doit offrir un stockage durable indépendant du disque du conteneur. Une offre qui met le processus en veille ou le redémarre interrompt les connexions. Le journal annule les manches interrompues explicitement et permet de retrouver les résultats déjà terminés. L’image seule ne fournit ni base distante ni domaine ni certificat ; le service de démonstration Render Free est déployé avec une base Atlas M0 dédiée. Une seule instance applicative est nécessaire avec l’architecture actuelle.
 
 ## Préparation Render gratuit
 
@@ -117,4 +119,4 @@ Utilisez une base MongoDB Atlas Free (anciennement M0), séparée du stockage Re
 
 Render Free partage 750 heures d’instances par mois entre les services d’un même espace. Une instance se met en veille après 15 minutes sans trafic entrant, puis redémarre à la prochaine demande ; son disque est éphémère. La veille, un redéploiement ou un redémarrage ferme les connexions. MongoDB conserve les avis d’annulation, les résultats terminés et les résultats à réessayer. Gardez une seule instance Duel : la présence et le moteur ne sont pas partagés entre plusieurs serveurs. Un nouveau processus attend la libération du moteur, même après la promotion HTTP ; `/health/ready` reste 503 pendant cette attente. Aucun dispositif ne contourne la veille. [Limites Render Free](https://render.com/docs/free), [WebSockets sur Render](https://render.com/docs/websocket), [référence du Blueprint](https://render.com/docs/blueprint-spec).
 
-La publication effective attend la connexion du fournisseur, la configuration de MongoDB et des secrets, puis une vérification sur l’URL HTTPS réelle. Les tests locaux du conteneur ne prouvent pas qu’un service distant est déjà disponible.
+La démonstration est publiée sur l’URL HTTPS indiquée en haut de ce README, avec les secrets privés et les droits MongoDB dédiés. Les parcours invités, les places exclusives, la reconnexion et une manche de 90 secondes ont été vérifiés sur le service public.
