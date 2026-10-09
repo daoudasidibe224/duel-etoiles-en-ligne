@@ -13,7 +13,7 @@ body
         input(type='hidden' name='_csrf' value=csrfToken)
         .field
           label.label(for='nomUtilisateur') Votre pseudo
-          input#nomUtilisateur.input(type='text' name='nomUtilisateur' required minlength='3' maxlength='24' pattern='[A-Za-z0-9_-]{3,24}' autocomplete='nickname' value=typeof nomUtilisateur !== 'undefined' ? nomUtilisateur : '' aria-describedby='guest-help' aria-invalid=typeof erreurs !== 'undefined' ? 'true' : undefined)
+          input#nomUtilisateur.input(type='text' name='nomUtilisateur' required minlength='3' maxlength='24' pattern='(?:[A-Za-z0-9_]|-){3,24}' autocomplete='nickname' value=typeof nomUtilisateur !== 'undefined' ? nomUtilisateur : '' aria-describedby='guest-help' aria-invalid=typeof erreurs !== 'undefined' ? 'true' : undefined)
           p#guest-help.help 3 à 24 lettres sans accent, chiffres, tirets ou tirets bas.
         button.button.is-primary.is-fullwidth(type='submit') Jouer par pseudo →
       p.help La session invitée reste disponible 8 heures dans ce navigateur. Les scores invités restent sur l’écran de fin.

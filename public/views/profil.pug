@@ -12,7 +12,7 @@ body
         input(type='hidden' name='_csrf' value=csrfToken)
         .field
           label.label(for='nouveauNomUtilisateur') Pseudo
-          input#nouveauNomUtilisateur.input(type='text' name='nouveauNomUtilisateur' value=utilisateur.nomUtilisateur required minlength='3' maxlength='24' pattern='[A-Za-z0-9_-]{3,24}' autocomplete='username')
+          input#nouveauNomUtilisateur.input(type='text' name='nouveauNomUtilisateur' value=utilisateur.nomUtilisateur required minlength='3' maxlength='24' pattern='(?:[A-Za-z0-9_]|-){3,24}' autocomplete='username')
           p.help 3 à 24 lettres, chiffres, tirets ou tirets bas.
         button.button.is-primary(type='submit') Enregistrer
   include includes/footer.pug

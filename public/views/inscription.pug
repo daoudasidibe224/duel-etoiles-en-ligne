@@ -25,7 +25,7 @@ body
           summary Choisir un pseudo (facultatif)
           .field
             label.label(for='nomUtilisateur') Pseudo (facultatif)
-            input#nomUtilisateur.input(type='text' name='nomUtilisateur' minlength='3' maxlength='24' pattern='[A-Za-z0-9_-]{3,24}' autocomplete='username' value=typeof nomUtilisateur !== 'undefined' ? nomUtilisateur : '' aria-invalid=typeof erreurs !== 'undefined' && erreurs.nomUtilisateur ? 'true' : undefined aria-describedby='pseudo-aide')
+            input#nomUtilisateur.input(type='text' name='nomUtilisateur' minlength='3' maxlength='24' pattern='(?:[A-Za-z0-9_]|-){3,24}' autocomplete='username' value=typeof nomUtilisateur !== 'undefined' ? nomUtilisateur : '' aria-invalid=typeof erreurs !== 'undefined' && erreurs.nomUtilisateur ? 'true' : undefined aria-describedby='pseudo-aide')
             p#pseudo-aide.help 3 à 24 lettres, chiffres, tirets ou tirets bas.
         button.button.is-primary.is-fullwidth(type='submit') Créer mon compte →
       p.form-foot #[a(href='/jouer') Jouer par pseudo] · Déjà un compte ?

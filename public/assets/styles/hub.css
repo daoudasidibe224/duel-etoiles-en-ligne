@@ -12,6 +12,8 @@
   --yellow: #b33732;
   --text: #273d47;
   --muted: #596e79;
+  --focus-color: #006d77;
+  --focus-ring: 0 0 0 2px var(--paper), 0 0 0 4px var(--focus-color);
   --neo-raised: 8px 8px 20px #ced9de, -8px -8px 20px #ffffff;
   --neo-inset: inset 4px 4px 8px #d0dade, inset -4px -4px 8px #ffffff;
 }
@@ -47,13 +49,23 @@ select,
 textarea {
   touch-action: manipulation;
 }
+:focus:not(:focus-visible) {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid var(--focus-color);
+  outline-offset: 3px;
+}
 button:focus-visible,
-a:focus-visible,
+a:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 3px solid #007e90;
-  outline-offset: 4px;
+  outline: none;
+  box-shadow: var(--focus-ring), var(--neo-inset);
 }
 button,
 a.button {
@@ -129,10 +141,24 @@ select:focus {
   box-shadow: none;
 }
 .navbar-start {
-  gap: 4px;
+  gap: 8px;
 }
 .navbar-burger span {
   background: #273d47;
+}
+.navbar-burger {
+  border: 1px solid #f8ffff;
+  border-radius: 13px;
+  background: var(--paper);
+  box-shadow:
+    3px 3px 8px #cbd6dc,
+    -3px -3px 8px #fff;
+}
+.navbar-burger:hover {
+  background: #dce7eb;
+}
+.navbar-burger:focus-visible {
+  box-shadow: var(--focus-ring);
 }
 .guest-access {
   color: #526875;
@@ -168,7 +194,7 @@ select:focus {
 .console-label,
 .eyebrow,
 .system-light {
-  color: #536e78 !important;
+  color: #49616d !important;
 }
 .console-label {
   border: 0;
@@ -189,6 +215,9 @@ select:focus {
 }
 .button:hover {
   transform: translateY(-1px);
+  background: #dce7eb;
+  border-color: #b8cbd2;
+  color: var(--text);
 }
 .button.is-primary {
   background: #006d77;
@@ -206,6 +235,21 @@ select:focus {
   color: #006d77;
   border-color: #97b9be;
   background: transparent;
+}
+.button.is-outlined:hover {
+  color: #005964;
+  background: #dce7eb;
+  border-color: #789da6;
+}
+.button:active {
+  transform: none;
+  box-shadow: var(--neo-inset);
+}
+.button:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+.input[aria-invalid="true"] {
+  border-color: #a8322e !important;
 }
 .auth-card .title,
 .auth-card h1,
@@ -225,7 +269,7 @@ select:focus {
 .footer {
   background: none;
   border: 0;
-  color: #6b7e87;
+  color: var(--muted);
   margin-top: 30px;
   padding: 24px;
 }
@@ -238,11 +282,29 @@ select:focus {
   background: #fff6e1;
   color: #5d4111;
 }
+.notification.is-danger {
+  background: #f7e4df;
+  border-color: #a8322e;
+  color: #862b28;
+}
+.notification.is-success {
+  background: #dcece7;
+  border-color: #006d77;
+  color: #00585f;
+}
 .message,
 .chat-message {
   background: #e2eaf0;
   color: #273d47;
   border-color: #ccdade;
+}
+.chat-message {
+  padding: 14px 16px;
+  border-radius: 12px;
+  margin-bottom: 10px;
+}
+.chat-meta {
+  color: #49616d;
 }
 .connection-status {
   color: #596e79;
@@ -268,9 +330,38 @@ select:focus {
 }
 .lobby-guide {
   border: 0;
+  align-items: start;
+}
+.guide-item {
+  padding: 20px;
+  min-width: 0;
+}
+.lobby-games {
+  padding: 24px;
+}
+.panel-heading-row {
+  padding-bottom: 18px;
+}
+.room-row {
+  gap: 16px;
+  padding: 18px 0;
+}
+.room-row .button {
+  min-height: 44px;
+}
+.match-facts {
+  gap: 8px;
+  flex-wrap: wrap;
+  white-space: normal;
+}
+.match-facts span,
+.match-facts span + span {
+  border: 0;
+  padding: 5px 10px;
+  border-radius: 8px;
 }
 .guide-symbol {
-  color: #007e90;
+  color: #006d77;
 }
 .page-heading h1 {
   font-family: Nunito, sans-serif;
@@ -308,7 +399,7 @@ select:focus {
   font-size: 0.85rem;
   letter-spacing: 0.035em;
   font-weight: 800;
-  color: #007e90;
+  color: #006d77;
   margin-bottom: 15px;
 }
 .hub-intro h1 {
@@ -342,6 +433,8 @@ select:focus {
   border: 1px solid #f8ffff;
   padding: 17px;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
   transition: transform 0.2s;
 }
 .hub-game:hover {
@@ -349,6 +442,7 @@ select:focus {
 }
 .hub-art {
   height: 185px;
+  flex: none;
   border-radius: 20px;
   display: grid;
   place-items: center;
@@ -369,11 +463,14 @@ select:focus {
 }
 .hub-game-content {
   padding: 20px 13px 10px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
 }
 .hub-format {
   font-size: 0.8rem;
   font-weight: 800;
-  color: #5b717c;
+  color: #49616d;
   margin-bottom: 8px;
 }
 .hub-game h2 {
@@ -384,7 +481,6 @@ select:focus {
   color: #596e79;
   margin: 11px 0 24px;
   max-width: 330px;
-  min-height: 75px;
 }
 .hub-play {
   display: flex;
@@ -392,6 +488,7 @@ select:focus {
   justify-content: space-between;
   width: 100%;
   padding: 13px 18px;
+  margin-top: auto;
 }
 .hub-drawing .hub-play {
   background: #006d77;
@@ -415,7 +512,7 @@ select:focus {
 }
 .hub-note {
   text-align: center;
-  color: #657984;
+  color: var(--muted);
   font-size: 0.85rem;
   margin: 28px 0 0;
 }
@@ -539,6 +636,13 @@ select:focus {
   .lobby-layout {
     gap: 25px;
   }
+  .lobby-games,
+  .guide-item {
+    padding: 20px;
+  }
+  .chat-message {
+    padding: 12px;
+  }
   .hub-page .command-row {
     padding-top: 0;
   }
@@ -554,6 +658,11 @@ select:focus {
   }
 }
 @media (forced-colors: active) {
+  :focus-visible {
+    outline: 2px solid Highlight !important;
+    outline-offset: 3px;
+    box-shadow: none !important;
+  }
   .hub-game,
   .button,
   .auth-card {
@@ -594,11 +703,26 @@ select:focus {
     -4px -4px 10px #fff;
   min-height: 44px;
 }
+.game-toolbar .button:hover,
+.arena-shell .touch-controls button:hover {
+  background: #dce7eb;
+  color: #005964;
+}
+.arena-shell .button:focus-visible,
+.arena-shell .touch-controls button:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+.arena-shell .game-toolbar .button {
+  min-height: 44px;
+}
 .hud-player {
   --player-tone: #b33732;
 }
 .hud-player[data-tone="mint"] {
   --player-tone: #006d77;
+}
+.hud-player.is-empty output {
+  color: var(--muted);
 }
 .player-name span,
 #countdown {
@@ -632,6 +756,38 @@ select:focus {
 .game-panel p,
 .game-panel .panel-kicker {
   color: #496573;
+}
+.game-panel .final-scores p {
+  color: var(--text);
+}
+.game-rules-panel {
+  background: var(--paper);
+  color: var(--text);
+  border: 1px solid #fff;
+  border-radius: 20px;
+  padding: 24px;
+}
+.rules-heading h2,
+.rules-columns h3 {
+  color: var(--text);
+}
+.rule-intro,
+.rule-controls,
+.rules-columns p,
+.rules-note {
+  color: var(--muted);
+}
+.rules-columns {
+  gap: 24px;
+}
+@media (max-width: 560px) {
+  .game-rules-panel {
+    padding: 20px;
+  }
+  .rules-columns {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
 }
 .arena-viewport {
   background: #102338;
