@@ -576,7 +576,9 @@ test("progression, étoiles communes et bonus ne se rejouent pas après reprise"
   const fresh = createApp({
     secret: "a".repeat(48),
     store,
-    gameOptions: { durationMs: 5000, reconnectMs: 500 },
+    // Keep scheduled pickups away from the two stationary players so this
+    // scenario measures only its explicit claims and persisted result.
+    gameOptions: { durationMs: 5000, reconnectMs: 500, random: () => 0 },
   });
   await new Promise<void>((resolve) =>
     fresh.server.listen(0, "127.0.0.1", resolve),
