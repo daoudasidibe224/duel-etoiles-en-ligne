@@ -1,615 +1,702 @@
-import * as T from "three";
-import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
-import { createArenaCamera } from "./arenaCamera";
 import type { Player, Star } from "../shared/contracts";
 import { activeBonus, itemY } from "../shared/progression";
+import {
+  ARENA_WIDTH,
+  ARENA_HEIGHT,
+  arenaX,
+  PILOT_FLOOR,
+  PILOT_TOP,
+} from "./arenaLayout";
+export const ITEM_COLORS: Record<Star["kind"], string> = {
+  star: "#ffe09a",
+  gold: "#ffbc38",
+  sprint: "#70daef",
+  multiplier: "#bc9ff0",
+  shield: "#82ddbf",
+  magnet: "#eea6c9",
+  meteor: "#ff8065",
+  slime: "#b6dc62",
+  barrier: "#f1a373",
+};
 export type VisualRunner = Pick<
   Player,
   "id" | "x" | "bonus" | "slowedUntil" | "feedback"
-> & { color: string; moving: boolean; facing: number; local: boolean };
-export const ITEM_COLORS: Record<Star["kind"], string> = {
-  star: "#ffda62",
-  gold: "#ffbc38",
-  sprint: "#56e5ff",
-  multiplier: "#ba9aff",
-  shield: "#78efa9",
-  magnet: "#fa94d6",
-  meteor: "#ff715c",
-  slime: "#b6e757",
-  barrier: "#ff9868",
+> & {
+  color: string;
+  moving: boolean;
+  facing: number;
+  local: boolean;
 };
-function material(color: string, glow = false) {
-  return new T.MeshStandardMaterial({
-    color,
-    roughness: 0.38,
-    metalness: 0.25,
-    emissive: glow ? color : "#000000",
-    emissiveIntensity: glow ? 0.4 : 0,
-  });
-}
-function mesh(
-  parent: T.Object3D,
-  geometry: T.BufferGeometry,
-  mat: T.Material,
-  position: [number, number, number],
-  scale?: [number, number, number],
+type Brush = CanvasRenderingContext2D;
+function pill(
+  c: Brush,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+  fill: string | CanvasGradient,
+  stroke?: string,
 ) {
-  const part = new T.Mesh(geometry, mat);
-  part.position.set(...position);
-  if (scale) part.scale.set(...scale);
-  parent.add(part);
-  return part;
+  c.beginPath();
+  c.roundRect(x, y, w, h, r);
+  c.fillStyle = fill;
+  c.fill();
+  if (stroke) {
+    c.strokeStyle = stroke;
+    c.lineWidth = 2;
+    c.stroke();
+  }
 }
-function dispose(root: T.Object3D) {
-  root.traverse((part) => {
-    if (
-      part instanceof T.Mesh ||
-      part instanceof T.Sprite ||
-      part instanceof T.Points
-    ) {
-      if (part instanceof T.Mesh || part instanceof T.Points)
-        part.geometry.dispose();
-      for (const mat of Array.isArray(part.material)
-        ? part.material
-        : [part.material]) {
-        if ("map" in mat && mat.map instanceof T.Texture) mat.map.dispose();
-        mat.dispose();
-      }
+function ellipse(
+  c: Brush,
+  x: number,
+  y: number,
+  rx: number,
+  ry: number,
+  fill: string,
+) {
+  c.beginPath();
+  c.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+  c.fillStyle = fill;
+  c.fill();
+}
+function line(c: Brush, points: number[][], color: string, width = 2) {
+  c.beginPath();
+  points.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
+  c.lineWidth = width;
+  c.strokeStyle = color;
+  c.lineCap = "round";
+  c.lineJoin = "round";
+  c.stroke();
+}
+function star(c: Brush, radius: number, color: string) {
+  c.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = (i * Math.PI) / 5 - Math.PI / 2,
+      r = i % 2 ? radius * 0.48 : radius;
+    if (i) c.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    else c.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  c.closePath();
+  c.fillStyle = color;
+  c.fill();
+  c.strokeStyle = "#fff0b9";
+  c.lineWidth = 2;
+  c.stroke();
+}
+function symbol(c: Brush, kind: Star["kind"], color: string, size = 20) {
+  c.fillStyle = color;
+  c.strokeStyle = color;
+  c.lineWidth = 4;
+  if (kind === "shield") {
+    c.beginPath();
+    c.moveTo(-13, -13);
+    c.quadraticCurveTo(0, -20, 13, -13);
+    c.lineTo(11, 4);
+    c.quadraticCurveTo(8, 14, 0, 19);
+    c.quadraticCurveTo(-8, 14, -11, 4);
+    c.closePath();
+    c.stroke();
+    line(
+      c,
+      [
+        [-6, 0],
+        [-1, 5],
+        [7, -5],
+      ],
+      color,
+      3,
+    );
+  } else if (kind === "magnet") {
+    c.beginPath();
+    c.moveTo(-11, -14);
+    c.lineTo(-11, 4);
+    c.arc(0, 4, 11, Math.PI, 0, true);
+    c.lineTo(11, -14);
+    c.stroke();
+    line(
+      c,
+      [
+        [-11, -14],
+        [-11, -5],
+      ],
+      "#fff5ef",
+      5,
+    );
+    line(
+      c,
+      [
+        [11, -14],
+        [11, -5],
+      ],
+      "#fff5ef",
+      5,
+    );
+  } else if (kind === "sprint") {
+    line(
+      c,
+      [
+        [-12, -12],
+        [-2, 0],
+        [-12, 12],
+      ],
+      color,
+      4,
+    );
+    line(
+      c,
+      [
+        [2, -12],
+        [12, 0],
+        [2, 12],
+      ],
+      color,
+      4,
+    );
+  } else {
+    c.font = `700 ${size}px "Chakra Petch", sans-serif`;
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    c.fillText(
+      (
+        {
+          gold: "+3",
+          multiplier: "×2",
+          barrier: "−2",
+          meteor: "−3",
+          slime: "½",
+          star: "",
+        } as Partial<Record<Star["kind"], string>>
+      )[kind] ?? "",
+      0,
+      1,
+    );
+  }
+}
+function backdrop(c: Brush) {
+  const sky = c.createLinearGradient(0, 0, 0, 540);
+  sky.addColorStop(0, "#0b192d");
+  sky.addColorStop(0.7, "#18344b");
+  sky.addColorStop(1, "#263e4c");
+  c.fillStyle = sky;
+  c.fillRect(0, 0, 960, 540);
+  const nebula = c.createRadialGradient(670, 130, 10, 670, 130, 320);
+  nebula.addColorStop(0, "#41727840");
+  nebula.addColorStop(1, "#244f6600");
+  c.fillStyle = nebula;
+  c.fillRect(0, 0, 960, 490);
+  for (let i = 0; i < 100; i++) {
+    const x = (i * 193 + 37) % 960,
+      y = (i * 113 + 19) % 416;
+    ellipse(
+      c,
+      x,
+      y,
+      i % 11 ? 0.85 : 1.5,
+      i % 11 ? 0.85 : 1.5,
+      i % 3 ? "#bde8e456" : "#f5d9a578",
+    );
+  }
+  // A drawn ringed planet belongs to the background, away from falling pickups.
+  c.save();
+  c.translate(765, 115);
+  c.rotate(-0.25);
+  c.beginPath();
+  c.ellipse(0, 0, 106, 24, 0, Math.PI, 2 * Math.PI);
+  c.strokeStyle = "#98bac65c";
+  c.lineWidth = 12;
+  c.stroke();
+  const planet = c.createLinearGradient(-65, -60, 65, 65);
+  planet.addColorStop(0, "#729aab");
+  planet.addColorStop(0.45, "#476a80");
+  planet.addColorStop(1, "#243c54");
+  ellipse(c, 0, 0, 64, 64, "#21374e");
+  c.beginPath();
+  c.arc(0, 0, 63, 0, Math.PI * 2);
+  c.fillStyle = planet;
+  c.fill();
+  c.save();
+  c.clip();
+  for (const [y, w] of [
+    [-33, 9],
+    [-13, 13],
+    [10, 9],
+    [30, 5],
+  ]) {
+    line(
+      c,
+      [
+        [-75, y],
+        [0, y + 8],
+        [75, y + 5],
+      ],
+      "#97b9bd2d",
+      w,
+    );
+  }
+  c.restore();
+  c.beginPath();
+  c.ellipse(0, 0, 106, 24, 0, 0, Math.PI);
+  c.strokeStyle = "#a6cbd481";
+  c.lineWidth = 12;
+  c.stroke();
+  c.restore();
+  // Silhouette of a distant moon base and two rocky ridges. No scrolling behind the collision lane.
+  c.fillStyle = "#102639";
+  c.beginPath();
+  c.moveTo(0, 406);
+  for (let i = 0; i <= 12; i++) c.lineTo(i * 80, 385 + ((i * 37) % 59));
+  c.lineTo(960, 500);
+  c.lineTo(0, 500);
+  c.fill();
+  pill(c, 92, 371, 101, 58, 11, "#223f50");
+  pill(c, 110, 353, 67, 24, 10, "#2c4c5a");
+  for (let i = 0; i < 5; i++) pill(c, 105 + i * 16, 389, 8, 10, 2, "#a4e4d257");
+  line(
+    c,
+    [
+      [158, 352],
+      [158, 322],
+    ],
+    "#597783",
+    3,
+  );
+  ellipse(c, 158, 321, 3, 3, "#e2b47c");
+  c.fillStyle = "#355263";
+  c.beginPath();
+  c.moveTo(0, 466);
+  for (let i = 0; i <= 16; i++) c.lineTo(i * 60, 447 + ((i * 19) % 27));
+  c.lineTo(960, 500);
+  c.lineTo(0, 500);
+  c.fill();
+  const floor = c.createLinearGradient(0, 486, 0, 540);
+  floor.addColorStop(0, "#66817e");
+  floor.addColorStop(0.18, "#3c575d");
+  floor.addColorStop(1, "#1c3442");
+  pill(c, 12, 489, 936, 61, 14, floor);
+  pill(c, 12, 487, 936, 5, 2, "#bce0bc");
+  for (let x = 32; x < 940; x += 64) {
+    line(
+      c,
+      [
+        [x, 499],
+        [x - 13, 533],
+      ],
+      "#97b5ac29",
+    );
+    pill(c, x + 10, 507, 22, 3, 1, "#102b37");
+  }
+  line(
+    c,
+    [
+      [16, 539],
+      [944, 539],
+    ],
+    "#718f84",
+    2,
+  );
+  // Faint inset frame stops the large empty canvas feeling unfinished.
+  line(
+    c,
+    [
+      [20, 58],
+      [20, 20],
+      [58, 20],
+    ],
+    "#8fbab93b",
+  );
+  line(
+    c,
+    [
+      [902, 20],
+      [940, 20],
+      [940, 58],
+    ],
+    "#8fbab93b",
+  );
+}
+function pickup(c: Brush, kind: Star["kind"]) {
+  const color = ITEM_COLORS[kind];
+  if (kind === "star" || kind === "gold") {
+    star(c, kind === "gold" ? 24 : 19, color);
+    if (kind === "gold") {
+      c.save();
+      c.translate(0, 36);
+      pill(c, -20, -12, 40, 24, 8, "#43351f");
+      symbol(c, "gold", "#ffe49e", 20);
+      c.restore();
     }
-  });
-}
-function label(text: string, color: string) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 80;
-  const ctx = canvas.getContext("2d")!;
-  let fontSize = 38;
-  ctx.font = `bold ${fontSize}px sans-serif`;
-  while (ctx.measureText(text).width > 238 && fontSize > 14)
-    ctx.font = `bold ${--fontSize}px sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.strokeStyle = "#101c2b";
-  ctx.lineWidth = 9;
-  ctx.strokeText(text, 128, 40);
-  ctx.fillStyle = color;
-  ctx.fillText(text, 128, 40);
-  const sprite = new T.Sprite(
-    new T.SpriteMaterial({
-      map: new T.CanvasTexture(canvas),
-      depthTest: false,
-    }),
-  );
-  sprite.scale.set(1.8, 0.56, 1);
-  return sprite;
-}
-function starGeometry() {
-  const shape = new T.Shape();
-  for (let i = 0; i <= 10; i++) {
-    const a = (i * Math.PI) / 5 + Math.PI / 2,
-      r = i % 2 ? 0.16 : 0.35;
-    if (i === 0) shape.moveTo(Math.cos(a) * r, Math.sin(a) * r);
-    else shape.lineTo(Math.cos(a) * r, Math.sin(a) * r);
-  }
-  return new T.ExtrudeGeometry(shape, {
-    depth: 0.12,
-    bevelEnabled: true,
-    bevelSize: 0.025,
-    bevelThickness: 0.025,
-    bevelSegments: 1,
-    steps: 1,
-  });
-}
-function robot(color: string) {
-  const group = new T.Group(),
-    shell = material(color),
-    dark = material("#182a3d"),
-    bright = material("#d8fbff", true);
-  mesh(
-    group,
-    new RoundedBoxGeometry(0.65, 0.54, 0.4, 2, 0.1),
-    shell,
-    [0, 0.68, 0],
-  );
-  mesh(
-    group,
-    new T.SphereGeometry(0.42, 16, 12),
-    shell,
-    [0, 1.15, 0],
-    [1, 0.82, 0.85],
-  );
-  mesh(
-    group,
-    new RoundedBoxGeometry(0.61, 0.23, 0.12, 2, 0.08),
-    dark,
-    [0, 1.15, 0.32],
-  );
-  for (const x of [-0.14, 0.14])
-    mesh(
-      group,
-      new T.SphereGeometry(0.055, 8, 6),
-      bright,
-      [x, 1.16, 0.4],
-      [1, 1.35, 0.6],
+  } else if (kind === "meteor") {
+    c.fillStyle = "#9b5141";
+    c.beginPath();
+    for (let i = 0; i < 9; i++) {
+      const a = (i * Math.PI * 2) / 9,
+        r = i % 2 ? 25 : 29;
+      if (i) c.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+      else c.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+    }
+    c.closePath();
+    c.fill();
+    c.strokeStyle = "#ffc28a";
+    c.lineWidth = 2;
+    c.stroke();
+    ellipse(c, -9, -9, 7, 5, "#663f39");
+    ellipse(c, 12, 6, 6, 6, "#713c32");
+    line(
+      c,
+      [
+        [-8, 19],
+        [0, 6],
+        [7, 11],
+        [19, -12],
+      ],
+      "#ffb074",
+      3,
     );
-  mesh(
-    group,
-    new T.CylinderGeometry(0.023, 0.023, 0.21, 6),
-    dark,
-    [0.05, 1.58, 0],
-  );
-  mesh(group, new T.SphereGeometry(0.065, 8, 6), bright, [0.05, 1.7, 0]);
-  mesh(group, new T.TorusGeometry(0.1, 0.023, 6, 12), bright, [0, 0.72, 0.225]);
-  const legs: T.Group[] = [],
-    arms: T.Group[] = [];
-  for (const x of [-1, 1]) {
-    const arm = new T.Group();
-    arm.position.set(x * 0.43, 0.83, 0);
-    group.add(arm);
-    mesh(arm, new T.SphereGeometry(0.12, 8, 6), dark, [0, 0, 0]);
-    mesh(arm, new T.CapsuleGeometry(0.09, 0.19, 3, 8), shell, [0, -0.18, 0]);
-    arms.push(arm);
-    const leg = new T.Group();
-    leg.position.set(x * 0.18, 0.4, 0);
-    group.add(leg);
-    mesh(leg, new T.CapsuleGeometry(0.095, 0.17, 3, 8), dark, [0, -0.14, 0]);
-    mesh(
-      leg,
-      new RoundedBoxGeometry(0.24, 0.14, 0.34, 1, 0.05),
-      shell,
-      [0, -0.33, 0.045],
-    );
-    legs.push(leg);
+    c.save();
+    c.translate(0, 43);
+    pill(c, -20, -12, 40, 24, 8, "#542d32");
+    symbol(c, kind, "#ffc0a4", 21);
+    c.restore();
+  } else if (kind === "barrier") {
+    pill(c, -28, -20, 56, 40, 9, "#754a39", "#f0aa73");
+    c.save();
+    c.beginPath();
+    c.roundRect(-25, -17, 50, 34, 6);
+    c.clip();
+    for (let x = -50; x < 70; x += 22)
+      line(
+        c,
+        [
+          [x, -19],
+          [x - 22, 19],
+        ],
+        "#e79754",
+        9,
+      );
+    c.restore();
+    pill(c, -18, -13, 36, 26, 6, "#432d2a");
+    symbol(c, kind, "#ffe0c0", 21);
+  } else if (kind === "slime") {
+    ellipse(c, 0, 11, 37, 14, "#badb6180");
+    ellipse(c, 0, 4, 30, 13, "#badb61");
+    ellipse(c, -12, 0, 7, 6, "#ddec9f");
+    symbol(c, kind, "#304e29", 23);
+  } else {
+    const gradient = c.createLinearGradient(0, -28, 0, 28);
+    gradient.addColorStop(0, "#365667");
+    gradient.addColorStop(1, "#1e3046");
+    pill(c, -27, -28, 54, 56, 16, gradient, color);
+    pill(c, -18, -25, 36, 3, 2, color);
+    symbol(c, kind, color, 25);
   }
-  const shield = mesh(
-    group,
-    new T.SphereGeometry(0.92, 16, 10),
-    new T.MeshBasicMaterial({
-      color: "#78efa9",
-      transparent: true,
-      opacity: 0.14,
-      depthWrite: false,
-      wireframe: true,
-    }),
-    [0, 0.78, 0],
+}
+function pilot(
+  c: Brush,
+  p: VisualRunner,
+  stride: number,
+  now: number,
+  reduced: boolean,
+) {
+  const color = p.color,
+    amber = color === "#ffbf47",
+    walk = p.moving && !reduced,
+    step = walk ? Math.sin(stride) : 0,
+    bounce = walk ? Math.abs(step) * 3 : 0;
+  const headTop = PILOT_TOP - PILOT_FLOOR;
+  c.save();
+  c.translate(0, -bounce);
+  // Two different helmet profiles and shoulder silhouettes, with a hand drawn outline.
+  const dark = "#18313c",
+    white = "#edf2de";
+  pill(c, -25, -116, 50, 90, 19, color, dark);
+  pill(c, -29, -112, 58, 18, 8, color, dark);
+  for (const i of [-1, 1]) {
+    const leg = step * i * 8;
+    pill(c, i * 13 - 11, -47 + Math.min(0, leg), 22, 39, 9, white, dark);
+    pill(c, i * 13 - 13, -17 + Math.min(0, leg), 29, 18, 6, dark);
+    pill(c, i * 13 - 10, -42 + Math.min(0, leg), 20, 6, 2, color);
+    c.save();
+    c.translate(i * 29, -103);
+    c.rotate(step * i * 0.45);
+    pill(c, -9, -2, 18, 47, 9, white, dark);
+    pill(c, -10, 27, 20, 19, 7, color, dark);
+    c.restore();
+  }
+  // Chest harness, zip and badge.
+  pill(c, -18, -99, 36, 37, 9, white);
+  line(
+    c,
+    [
+      [0, -97],
+      [0, -66],
+    ],
+    "#a1b5b0",
+    2,
   );
-  const ring = mesh(
-    group,
-    new T.TorusGeometry(0.6, 0.022, 6, 28),
-    material(color, true),
-    [0, 0.015, 0],
+  pill(c, -11, -86, 22, 17, 4, dark);
+  ellipse(c, -5, -78, 2.5, 2.5, color);
+  line(
+    c,
+    [
+      [1, -80],
+      [6, -80],
+    ],
+    "#b5d7d1",
+    2,
   );
-  ring.rotation.x = Math.PI / 2;
-  const shadow = mesh(
-    group,
-    new T.CircleGeometry(0.5, 20),
-    new T.MeshBasicMaterial({
-      color: "#061119",
-      transparent: true,
-      opacity: 0.5,
-      depthWrite: false,
-    }),
-    [0, 0.01, 0],
+  pill(c, -23, -62, 46, 8, 3, dark);
+  pill(c, -5, -63, 10, 10, 3, "#e4e9ce");
+  // Head ends at y330, matching the swept pickup contact band.
+  pill(
+    c,
+    amber ? -32 : -29,
+    headTop,
+    amber ? 64 : 58,
+    60,
+    amber ? 24 : 20,
+    white,
+    dark,
   );
-  shadow.rotation.x = -Math.PI / 2;
-  return {
-    group,
-    name: undefined as T.Sprite | undefined,
-    legs,
-    arms,
-    shield,
-    ring,
-    feedback: undefined as T.Sprite | undefined,
-    feedbackId: "",
-  };
+  pill(c, -26, -153, 52, 9, 4, color);
+  pill(c, -38, -141, 9, 24, 4, color, dark);
+  pill(c, 29, -141, 9, 24, 4, color, dark);
+  const visor = c.createLinearGradient(0, -145, 0, -115);
+  visor.addColorStop(0, "#294958");
+  visor.addColorStop(1, "#152c3b");
+  pill(c, -27, -144, 54, 31, 12, visor);
+  line(
+    c,
+    [
+      [-18, -135],
+      [-7, -139],
+      [10, -139],
+    ],
+    "#a6ded65e",
+    3,
+  );
+  ellipse(c, -10 + p.facing * 2, -128, 3.2, 4, "#dcefd6");
+  ellipse(c, 11 + p.facing * 2, -128, 3.2, 4, "#dcefd6");
+  if (!amber)
+    line(
+      c,
+      [
+        [3, -158],
+        [3, -167],
+      ],
+      color,
+      3,
+    );
+  c.restore();
+  const bonus = activeBonus(p, now);
+  if (bonus?.kind === "shield") {
+    c.beginPath();
+    c.ellipse(0, -79, 62, 94, 0, 0, Math.PI * 2);
+    c.fillStyle = "#82ddbf12";
+    c.fill();
+    c.strokeStyle = "#a7efdba0";
+    c.lineWidth = 3;
+    c.stroke();
+  }
+  if (bonus?.kind === "sprint" && p.moving && !reduced)
+    for (let i = 0; i < 3; i++)
+      line(
+        c,
+        [
+          [-p.facing * 45, -50 - i * 17],
+          [-p.facing * (64 + i * 8), -50 - i * 17],
+        ],
+        "#70daef",
+        3,
+      );
+  if (bonus?.kind === "multiplier") {
+    c.save();
+    c.translate(36, -169);
+    pill(c, -21, -13, 42, 26, 7, "#47395f");
+    symbol(c, "multiplier", "#e1caff", 22);
+    c.restore();
+  }
 }
 export class ArenaRenderer {
-  private renderer?: T.WebGLRenderer;
-  private fallback?: CanvasRenderingContext2D;
-  private scene = new T.Scene();
-  private camera = createArenaCamera();
-  private robots = new Map<string, ReturnType<typeof robot>>();
-  private objects = new Map<string, T.Group>();
+  private context: Brush | null;
+  private backdrop = document.createElement("canvas");
+  private sprites = new Map<Star["kind"], HTMLCanvasElement>();
+  private pilots = new Map<string, { x: number; stride: number }>();
   private width = 0;
-  private lost = false;
+  private lastFrame = 0;
+  private intervals: number[] = [];
   private reduced = window.matchMedia("(prefers-reduced-motion: reduce)")
     .matches;
+  private preference = window.matchMedia("(prefers-reduced-motion: reduce)");
+  private changePreference = () => {
+    this.reduced = this.preference.matches;
+  };
+  private disposed = false;
   constructor(
     public canvas: HTMLCanvasElement,
-    private notice: HTMLElement,
+    notice: HTMLElement,
   ) {
-    try {
-      this.renderer = new T.WebGLRenderer({
-        canvas,
-        antialias: true,
-        powerPreference: "low-power",
-        alpha: false,
-      });
-      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
-      this.renderer.outputColorSpace = T.SRGBColorSpace;
-      this.renderer.toneMapping = T.ACESFilmicToneMapping;
-      this.renderer.toneMappingExposure = 1.4;
-      canvas.dataset.renderer = "webgl-3d";
-      this.scene.background = new T.Color("#101f31");
-      this.scene.fog = new T.Fog("#101f31", 20, 40);
-      const backdropCanvas = document.createElement("canvas");
-      backdropCanvas.width = 8;
-      backdropCanvas.height = 256;
-      const backdropContext = backdropCanvas.getContext("2d")!;
-      const sky = backdropContext.createLinearGradient(0, 0, 0, 256);
-      sky.addColorStop(0, "#201c3c");
-      sky.addColorStop(0.5, "#172c45");
-      sky.addColorStop(1, "#305259");
-      backdropContext.fillStyle = sky;
-      backdropContext.fillRect(0, 0, 8, 256);
-      const skyTexture = new T.CanvasTexture(backdropCanvas);
-      skyTexture.colorSpace = T.SRGBColorSpace;
-      mesh(
-        this.scene,
-        new T.PlaneGeometry(60, 30),
-        new T.MeshBasicMaterial({ map: skyTexture, fog: false }),
-        [0, 5, -18],
-      );
-      for (let i = 0; i < 5; i++) {
-        const island = mesh(
-          this.scene,
-          new T.ConeGeometry(1.5 + (i % 2), 1.8 + (i % 3), 5),
-          material(i % 2 ? "#293e50" : "#31505a"),
-          [i * 4.3 - 8.6, -0.3, -7],
-        );
-        island.rotation.z = Math.PI;
-        mesh(
-          this.scene,
-          new T.CylinderGeometry(0.7, 1.3, 0.25, 6),
-          material("#385960"),
-          [i * 4.3 - 8.6, 0.75 + (i % 3) * 0.5, -7],
-        );
-        const crystal = mesh(
-          this.scene,
-          new T.OctahedronGeometry(0.24 + (i % 2) * 0.12),
-          material(i % 2 ? "#ad83e9" : "#6cc5cc", true),
-          [i * 4.3 - 8.6, 1.2 + (i % 3) * 0.5, -7],
-        );
-        crystal.scale.y = 1.7;
-      }
-      this.scene.add(new T.HemisphereLight("#bedaff", "#7c715b", 2.5));
-      const key = new T.DirectionalLight("#fff2d5", 4);
-      key.position.set(-5, 10, 9);
-      this.scene.add(key);
-      const rim = new T.DirectionalLight("#8de4d3", 2);
-      rim.position.set(7, 4, -6);
-      this.scene.add(rim);
-      mesh(
-        this.scene,
-        new RoundedBoxGeometry(21, 0.65, 5, 2, 0.17),
-        material("#2c4653"),
-        [0, -0.37, -0.6],
-      );
-      mesh(
-        this.scene,
-        new T.BoxGeometry(20.2, 0.06, 3.7),
-        material("#3a6267"),
-        [0, -0.02, -0.6],
-      );
-      for (const z of [-2.1, 1.05])
-        mesh(
-          this.scene,
-          new T.BoxGeometry(20.1, 0.04, 0.045),
-          material("#9dd9bd", true),
-          [0, 0.04, z],
-        );
-      for (let x = -9; x <= 9; x++)
-        mesh(
-          this.scene,
-          new T.BoxGeometry(0.025, 0.01, 3.1),
-          material("#547779"),
-          [x, 0.03, -0.6],
-        );
-      const positions: number[] = [],
-        colors: number[] = [];
-      for (let i = 0; i < 120; i++) {
-        positions.push(
-          ((i * 73) % 201) / 10 - 10,
-          ((i * 31) % 110) / 10 + 0.8,
-          -8 - (i % 5),
-        );
-        const tint = new T.Color(i % 3 ? "#87b8bf" : "#ffe8b0");
-        colors.push(tint.r, tint.g, tint.b);
-      }
-      const dots = new T.BufferGeometry();
-      dots.setAttribute("position", new T.Float32BufferAttribute(positions, 3));
-      dots.setAttribute("color", new T.Float32BufferAttribute(colors, 3));
-      this.scene.add(
-        new T.Points(
-          dots,
-          new T.PointsMaterial({
-            size: 0.045,
-            vertexColors: true,
-            sizeAttenuation: true,
-          }),
-        ),
-      );
-      mesh(
-        this.scene,
-        new T.SphereGeometry(1.15, 24, 16),
-        material("#859cb4"),
-        [-6.8, 6.2, -9],
-      );
-      const orbit = mesh(
-        this.scene,
-        new T.TorusGeometry(1.85, 0.035, 6, 56),
-        material("#a4cbc4", true),
-        [-6.8, 6.2, -9],
-      );
-      orbit.rotation.set(0.8, 0.3, 0.2);
-      for (const x of [-9.7, 9.7]) {
-        mesh(
-          this.scene,
-          new T.CylinderGeometry(0.12, 0.18, 1.3, 8),
-          material("#667d8b"),
-          [x, 0.6, -1.8],
-        );
-        mesh(
-          this.scene,
-          new T.SphereGeometry(0.15, 8, 6),
-          material("#baf4cd", true),
-          [x, 1.3, -1.8],
-        );
-      }
-      canvas.addEventListener("webglcontextlost", (event) => {
-        event.preventDefault();
-        this.lost = true;
-        notice.hidden = false;
-        notice.textContent =
-          "Affichage 3D interrompu. La partie continue ; le navigateur tente de le rétablir.";
-      });
-      canvas.addEventListener("webglcontextrestored", () => {
-        this.lost = false;
-        notice.hidden = true;
-        this.width = 0;
-      });
-    } catch {
-      // Replace the failed WebGL canvas: a canvas cannot switch rendering contexts.
-      const replacement = canvas.cloneNode() as HTMLCanvasElement;
-      canvas.replaceWith(replacement);
-      this.canvas = replacement;
-      this.fallback = replacement.getContext("2d") ?? undefined;
-      replacement.dataset.renderer = "2d-fallback";
-      notice.hidden = false;
+    this.context = canvas.getContext("2d", { alpha: false });
+    canvas.dataset.renderer = "canvas-2d";
+    canvas.dataset.scene = "lunar-arcade";
+    notice.hidden = !!this.context;
+    if (!this.context)
       notice.textContent =
-        "La 3D est indisponible sur ce navigateur. Le jeu reste jouable en vue simplifiée.";
+        "L’affichage du jeu est indisponible. Rechargez la page pour réessayer.";
+    this.preference.addEventListener("change", this.changePreference);
+    this.backdrop.width = 960;
+    this.backdrop.height = 540;
+    const background = this.backdrop.getContext("2d");
+    if (background) backdrop(background);
+    for (const kind of Object.keys(ITEM_COLORS) as Star["kind"][]) {
+      const sprite = document.createElement("canvas");
+      sprite.width = 100;
+      sprite.height = 120;
+      const brush = sprite.getContext("2d");
+      if (brush) {
+        brush.translate(50, 45);
+        pickup(brush, kind);
+      }
+      this.sprites.set(kind, sprite);
     }
   }
   render(players: VisualRunner[], items: Star[], now = Date.now()) {
-    if (this.fallback) {
-      this.renderFallback(players, items, now);
-      return;
-    }
-    if (!this.renderer || this.lost) return;
+    const c = this.context;
+    if (!c || this.disposed) return;
     const width = Math.max(
-      320,
-      Math.round(this.canvas.getBoundingClientRect().width),
-    );
-    if (width !== this.width) {
+        1,
+        Math.round(this.canvas.getBoundingClientRect().width),
+      ),
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (this.width !== width || this.canvas.width !== Math.round(width * dpr)) {
       this.width = width;
-      this.renderer.setSize(width, Math.round((width * 9) / 16), false);
-    }
-    const time = this.reduced ? 0 : now / 1000;
-    for (const [id, bot] of this.robots)
-      if (!players.some((p) => p.id === id)) {
-        this.scene.remove(bot.group);
-        dispose(bot.group);
-        this.robots.delete(id);
-      }
-    for (const player of players) {
-      let bot = this.robots.get(player.id);
-      if (!bot) {
-        bot = robot(player.color);
-        this.robots.set(player.id, bot);
-        this.scene.add(bot.group);
-      }
-      bot.group.scale.setScalar(1.35);
-      if (!bot.name) {
-        bot.name = label(player.local ? "VOUS" : "RIVAL", player.color);
-        bot.name.scale.set(1.2, 0.36, 1);
-        bot.name.position.set(0, 2.0, 0);
-        bot.group.add(bot.name);
-      }
-      bot.group.position.set((player.x + 22.5 - 480) / 48, 0, 0);
-      bot.group.rotation.y = player.facing * 0.28;
-      const stride = player.moving ? Math.sin(time * 15) * 0.45 : 0;
-      bot.legs.forEach((leg, i) => (leg.rotation.x = stride * (i ? 1 : -1)));
-      bot.arms.forEach((arm, i) => (arm.rotation.x = stride * (i ? -1 : 1)));
-      const effect = activeBonus(player, now);
-      bot.shield.visible = effect?.kind === "shield";
-      const aura = bot.ring.material as T.MeshStandardMaterial;
-      aura.color.set(effect ? ITEM_COLORS[effect.kind] : player.color);
-      aura.emissive.copy(aura.color);
-      if (player.feedback && now - player.feedback.at < 600 && !this.reduced) {
-        if (player.feedback.good)
-          bot.arms.forEach((arm, i) => (arm.rotation.z = i ? -0.8 : 0.8));
-        else bot.group.rotation.z = Math.sin(time * 35) * 0.045;
-      } else {
-        bot.arms.forEach((arm) => (arm.rotation.z = 0));
-        bot.group.rotation.z = 0;
-      }
-
-      bot.ring.scale.setScalar(
-        activeBonus(player, now)?.kind === "magnet" ? 2.8 : 1,
+      this.canvas.width = Math.round(width * dpr);
+      this.canvas.height = Math.round(
+        ((width * ARENA_HEIGHT) / ARENA_WIDTH) * dpr,
       );
-      if (player.feedback && bot.feedbackId !== player.feedback.id) {
-        if (bot.feedback) {
-          bot.group.remove(bot.feedback);
-          dispose(bot.feedback);
-        }
-        bot.feedbackId = player.feedback.id;
-        bot.feedback = label(
-          player.feedback.text,
-          player.feedback.good ? "#d5ffc4" : "#ffb199",
+    }
+    c.setTransform(
+      this.canvas.width / ARENA_WIDTH,
+      0,
+      0,
+      this.canvas.height / ARENA_HEIGHT,
+      0,
+      0,
+    );
+    c.drawImage(this.backdrop, 0, 0);
+    const clock = performance.now();
+    if (this.lastFrame && clock - this.lastFrame < 1000) {
+      this.intervals.push(clock - this.lastFrame);
+      if (this.intervals.length > 180) this.intervals.shift();
+    }
+    this.lastFrame = clock;
+    for (const [id] of this.pilots)
+      if (!players.some((p) => p.id === id)) this.pilots.delete(id);
+    // Warnings live on the floor. They do not hide the falling object or either pilot.
+    for (const item of items)
+      if (
+        ["meteor", "barrier", "slime"].includes(item.kind) &&
+        itemY(item, now) > 270
+      ) {
+        const x = arenaX(item.x);
+        ellipse(c, x, 493, 29, 6, ITEM_COLORS[item.kind] + "35");
+        line(
+          c,
+          [
+            [x - 19, 493],
+            [x + 19, 493],
+          ],
+          ITEM_COLORS[item.kind] + "a0",
+          2,
         );
-        bot.group.add(bot.feedback);
       }
-      if (bot.feedback) {
-        const age = (now - (player.feedback?.at ?? 0)) / 1000;
-        bot.feedback.visible = age < 1.5;
-        bot.name.visible = !bot.feedback.visible;
-        bot.feedback.position.set(0, 2.4 + Math.min(0.35, age * 0.2), 0);
-        bot.feedback.scale.set(2.8, 0.7, 1);
+    const ordered = [...players].sort(
+      (a, b) => Number(a.local) - Number(b.local),
+    );
+    for (const p of ordered) {
+      if (p.local) this.canvas.dataset.localX = p.x.toFixed(2);
+      let state = this.pilots.get(p.id);
+      if (!state) {
+        state = { x: p.x, stride: 0 };
+        this.pilots.set(p.id, state);
       }
-    }
-    for (const [id, obj] of this.objects)
-      if (!items.some((item) => item.id === id)) {
-        this.scene.remove(obj);
-        dispose(obj);
-        this.objects.delete(id);
-      }
-    for (const item of items) {
-      let obj = this.objects.get(item.id);
-      if (!obj) {
-        obj = new T.Group();
-        const color = ITEM_COLORS[item.kind],
-          mat = material(color, true);
-        if (item.kind === "star" || item.kind === "gold") {
-          const body = mesh(obj, starGeometry(), mat, [0, 0, 0]);
-          if (item.kind === "gold") body.scale.setScalar(1.3);
-        } else if (item.kind === "meteor")
-          mesh(obj, new T.IcosahedronGeometry(0.36, 0), mat, [0, 0, 0]);
-        else if (item.kind === "barrier") {
-          mesh(
-            obj,
-            new RoundedBoxGeometry(0.62, 0.7, 0.55, 1, 0.05),
-            mat,
-            [0, 0, 0],
-          );
-          for (const angle of [-0.7, 0.7]) {
-            const stripe = mesh(
-              obj,
-              new T.BoxGeometry(0.5, 0.09, 0.015),
-              material("#29394b"),
-              [0, 0, 0.29],
-            );
-            stripe.rotation.z = angle;
-          }
-        } else if (item.kind === "slime")
-          mesh(
-            obj,
-            new T.SphereGeometry(0.34, 12, 8),
-            mat,
-            [0, 0, 0],
-            [1, 0.6, 1],
-          );
-        else {
-          mesh(obj, new T.OctahedronGeometry(0.3), mat, [0, 0, 0]);
-          mesh(
-            obj,
-            new T.TorusGeometry(0.44, 0.045, 6, 20),
-            mat.clone(),
-            [0, 0, 0],
-          );
-        }
-        if (item.kind !== "star") {
-          const tag = label(
-            {
-              gold: "+3",
-              sprint: "VITESSE",
-              multiplier: "×2",
-              shield: "PROTECTION",
-              magnet: "AIMANT",
-              meteor: "−3",
-              slime: "RALENTIT",
-              barrier: "−2",
-              star: "+1",
-            }[item.kind],
-            color,
-          );
-          tag.position.y = 0.7;
-          tag.scale.set(2.6, 0.68, 1);
-          obj.add(tag);
-        }
-        if (["meteor", "barrier", "slime"].includes(item.kind)) {
-          const warning = mesh(
-            obj,
-            new T.RingGeometry(0.35, 0.5, 20),
-            new T.MeshBasicMaterial({
-              color,
-              transparent: true,
-              opacity: 0.38,
-              side: T.DoubleSide,
-              depthWrite: false,
-            }),
-            [0, 0, 0],
-          );
-          warning.rotation.x = -Math.PI / 2;
-          warning.userData.ground = true;
-        }
-        this.objects.set(item.id, obj);
-        this.scene.add(obj);
-      }
-      obj.position.set((item.x - 480) / 48, (490 - itemY(item, now)) / 48, 0);
-      for (const part of obj.children)
-        if (part.userData.ground) {
-          part.position.y = 0.05 - obj.position.y;
-          part.visible = itemY(item, now) < 425;
-        }
-      // Rotate geometry, keep the price/effect label facing the camera.
-      for (const part of obj.children)
-        if (
-          part instanceof T.Mesh &&
-          !part.userData.ground &&
-          item.kind !== "barrier"
-        )
-          part.rotation.y = time * 1.4;
-    }
-    this.renderer.render(this.scene, this.camera);
-  }
-  private renderFallback(players: VisualRunner[], items: Star[], now: number) {
-    const ctx = this.fallback!;
-    this.canvas.width = 960;
-    this.canvas.height = 540;
-    ctx.fillStyle = "#101f31";
-    ctx.fillRect(0, 0, 960, 540);
-    ctx.fillStyle = "#3a6267";
-    ctx.fillRect(0, 490, 960, 50);
-    for (const player of players) {
-      ctx.fillStyle = player.color;
-      ctx.fillRect(player.x, 433, 45, 57);
-      ctx.fillStyle = "#142136";
-      ctx.fillRect(player.x + 5, 440, 35, 15);
-      ctx.fillStyle = "#e7ffff";
-      ctx.fillRect(player.x + 10, 445, 5, 5);
-      ctx.fillRect(player.x + 30, 445, 5, 5);
-    }
-    for (const item of items) {
-      ctx.fillStyle = ITEM_COLORS[item.kind];
-      ctx.beginPath();
-      ctx.arc(item.x, itemY(item, now), 13, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.font = "bold 16px sans-serif";
-      ctx.fillText(
-        item.kind === "meteor"
-          ? "−3"
-          : item.kind === "barrier"
-            ? "−2"
-            : item.kind === "star"
-              ? "★"
-              : item.kind === "gold"
-                ? "+3"
-                : item.kind === "multiplier"
-                  ? "×2"
-                  : item.kind === "sprint"
-                    ? ">>"
-                    : item.kind === "shield"
-                      ? "◈"
-                      : item.kind === "magnet"
-                        ? "U"
-                        : "½",
-        item.x - 9,
-        itemY(item, now) - 17,
+      state.stride += Math.abs(p.x - state.x) * 0.045;
+      state.x = p.x;
+      const x = arenaX(p.x + 22.5),
+        close = players.some(
+          (other) => other.id !== p.id && Math.abs(other.x - p.x) < 36,
+        ),
+        offset = close ? (p.local ? 17 : -17) : 0;
+      c.save();
+      c.translate(Math.max(39, Math.min(921, x + offset)), PILOT_FLOOR);
+      ellipse(c, 0, 3, 35, 7, "#071d2b66");
+      c.beginPath();
+      c.ellipse(
+        0,
+        2,
+        p.bonus?.kind === "magnet" && activeBonus(p, now) ? 68 : 36,
+        8,
+        0,
+        0,
+        Math.PI * 2,
       );
+      c.strokeStyle = p.color;
+      c.lineWidth = p.local ? 3 : 1.5;
+      c.stroke();
+      pilot(c, p, state.stride, now, this.reduced);
+      if (p.local) {
+        const size = Math.max(20, (12 * 960) / width);
+        c.font = `700 ${size}px "Chakra Petch",sans-serif`;
+        c.textAlign = "center";
+        c.textBaseline = "middle";
+        const w = c.measureText("VOUS").width + 16,
+          y = -185;
+        pill(c, -w / 2, y - size / 2 - 4, w, size + 8, 7, "#142d3fee", p.color);
+        c.fillStyle = "#f3f2da";
+        c.fillText("VOUS", 0, y);
+      }
+      if (p.feedback && now - p.feedback.at < 800 && p.local) {
+        const text = p.feedback.text.match(/[+−-]\d+/)?.[0] ?? "";
+        if (text) {
+          c.font = '700 28px "Chakra Petch",sans-serif';
+          c.textAlign = "center";
+          c.lineWidth = 5;
+          c.strokeStyle = "#112839";
+          c.strokeText(text, 43, -125);
+          c.fillStyle = !p.feedback.good ? "#ffc198" : "#ffe8a3";
+          c.fillText(text, 43, -125);
+        }
+      }
+      c.restore();
     }
+    // Pickups render in front of pilots at the authoritative contact height.
+    for (const item of items) {
+      const sprite = this.sprites.get(item.kind);
+      if (sprite)
+        c.drawImage(sprite, arenaX(item.x) - 50, itemY(item, now) - 45);
+    }
+    if (this.intervals.length) {
+      const sorted = [...this.intervals].sort((a, b) => a - b);
+      this.canvas.dataset.frameMedianMs =
+        sorted[Math.floor(sorted.length * 0.5)].toFixed(2);
+      this.canvas.dataset.frameP95Ms =
+        sorted[
+          Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))
+        ].toFixed(2);
+      this.canvas.dataset.frameSamples = String(sorted.length);
+    }
+    this.canvas.dataset.pixelRatio = String(dpr);
+    this.canvas.dataset.cachedSprites = String(this.sprites.size);
+    this.canvas.dataset.visibleObjects = String(players.length + items.length);
   }
   dispose() {
-    dispose(this.scene);
-    this.renderer?.dispose();
+    this.disposed = true;
+    this.preference.removeEventListener("change", this.changePreference);
+    this.pilots.clear();
+    this.sprites.clear();
+    this.backdrop.width = 0;
+    this.backdrop.height = 0;
+    this.context = null;
   }
 }

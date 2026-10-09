@@ -279,6 +279,11 @@ test("une place par compte : doublons, reprise, changement de salon, départs et
     etat: { runningRight: true },
   });
   assert.equal((await moved).id, app.salons[room].proprietaireId);
+  const mover = app.salons[room].utilisateurs.find(
+    (player) => player.userId === app.salons[room].proprietaireId,
+  )!;
+  assert.equal(mover.movementSequence, 2);
+  assert.ok(mover.movementStartedAt! <= mover.sampledAt!);
   second.emit("deplacementMonJoueur", {
     roundId: round.id,
     sequence: 1,
@@ -302,7 +307,33 @@ test("une place par compte : doublons, reprise, changement de salon, départs et
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(starts, 1);
   assert.equal(movements, 1);
+  assert.equal(mover.movementSequence, 2);
   assert.equal(scores, 0);
+  const acknowledged = new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error("Arrêt non confirmé")),
+      2000,
+    );
+    const onData = (payload: unknown) => {
+      const parsed = gameRoomSchema.safeParse(payload);
+      const player =
+        parsed.success &&
+        parsed.data.utilisateurs.find((value) => value.userId === mover.userId);
+      if (player && player.movementSequence === 3) {
+        clearTimeout(timeout);
+        second.off("roomData", onData);
+        assert.ok(player.sampledAt! >= player.movementStartedAt!);
+        resolve();
+      }
+    };
+    second.on("roomData", onData);
+  });
+  second.emit("deplacementMonJoueur", {
+    roundId: round.id,
+    sequence: 3,
+    etat: { runningLeft: false, runningRight: false },
+  });
+  await acknowledged;
   const refresh = await socket("/jeu", b.cookie);
   const resumeInit = socketEvent(refresh, "init", roundSchema);
   assert.equal(await refresh.emitWithAck("join", { room }), undefined);

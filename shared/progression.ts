@@ -33,10 +33,28 @@ export function runnerSpeed(
   now = Date.now(),
 ) {
   return (
-    300 *
+    550 *
     (activeBonus(player, now)?.kind === "sprint" ? 1.5 : 1) *
     ((player.slowedUntil ?? 0) > now ? 0.5 : 1)
   );
+}
+// Integrate effect expiry inside the interval, including delayed render/server ticks.
+export function runnerTravel(
+  player: Pick<Player, "bonus" | "slowedUntil">,
+  from: number,
+  to: number,
+) {
+  if (to <= from) return 0;
+  const boundaries = [from, to, player.bonus?.expiresAt, player.slowedUntil]
+    .filter((at): at is number => at !== undefined && at >= from && at <= to)
+    .sort((a, b) => a - b);
+  let distance = 0;
+  for (let index = 1; index < boundaries.length; index++) {
+    distance +=
+      runnerSpeed(player, boundaries[index - 1]) *
+      ((boundaries[index] - boundaries[index - 1]) / 1000);
+  }
+  return distance;
 }
 export function activeBonus(player: Pick<Player, "bonus">, now = Date.now()) {
   return player.bonus && player.bonus.expiresAt > now

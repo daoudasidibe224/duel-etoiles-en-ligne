@@ -34,10 +34,70 @@
   display: none;
 }
 .arena-layout {
+  display: block;
+}
+.arena-subtitle {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 9px;
+}
+.arena-sidebar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 270px;
-  gap: 24px;
+  grid-template-columns: 1fr;
+}
+.arena-sidebar .bonus-controls {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
   align-items: start;
+  gap: 14px;
+}
+.arena-sidebar .bonus-legend {
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.arena-sidebar .danger-legend {
+  gap: 11px;
+}
+.arena-sidebar .effect-panel {
+  background: #172b30;
+  border-color: #39565b;
+}
+.arena-sidebar .effect-panel h2 {
+  color: #bbdfdd;
+}
+.game-page .game-hud {
+  background: #17232b;
+  padding: 12px 20px;
+}
+.game-page #gameCanvas,
+.game-page .arena-waiting {
+  border-color: #41616e;
+  border-radius: 16px;
+}
+.game-page .player-avatar {
+  border-radius: 50% 50% 42% 42%;
+  background: #edf1ea;
+  border: 3px solid var(--player-tone);
+}
+.game-page .player-avatar::before {
+  inset: 7px 2px 9px;
+  border-radius: 50%;
+}
+.game-page .player-avatar::after {
+  content: "";
+  width: 12px;
+  height: 2px;
+  background: #a1d4d3;
+  top: 15px;
+  left: 9px;
+}
+.game-page .touch-controls button {
+  width: 86px;
+  background: #1b343e;
+  border-color: #47646c;
+}
+.game-page .touch-controls button:active {
+  background: #3b6264;
 }
 .arena-main {
   min-width: 0;
@@ -397,8 +457,7 @@
 }
 @media (max-width: 1000px) {
   .arena-layout {
-    grid-template-columns: minmax(0, 1fr) 230px;
-    gap: 18px;
+    display: block;
   }
   .game-session-header {
     align-items: start;
@@ -430,9 +489,35 @@
     font-size: 10px;
   }
   .arena-layout {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
+    display: block;
+  }
+  .arena-subtitle {
+    font-size: 12px;
+  }
+  .arena-sidebar .bonus-controls {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .arena-sidebar .collect-panel,
+  .arena-sidebar .danger-panel {
+    padding: 14px;
+  }
+  .game-page .player-avatar {
+    width: 28px;
+    height: 30px;
+    border-width: 2px;
+  }
+  .game-page .player-avatar::after {
+    width: 8px;
+    top: 12px;
+    left: 8px;
+  }
+  .game-page .touch-controls button {
+    width: 74px;
+    min-height: 54px;
+  }
+  .game-page .game-hud {
+    padding: 12px 10px;
   }
   .arena-main,
   .arena-sidebar {
@@ -526,5 +611,46 @@
   * {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+.arena-effect-line {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  background: #172b30;
+  border-color: #39565b;
+}
+.arena-effect-line h2 {
+  margin: 0;
+  font-size: 12px;
+  flex: none;
+  color: #bbdfdd;
+}
+.arena-effect-line #bonus-status {
+  font-size: 12px;
+}
+.arena-effect-line #bonus-feedback {
+  margin-left: auto;
+  padding: 0;
+  font-size: 12px;
+}
+@media (max-width: 720px) {
+  .arena-effect-line {
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    padding: 8px 10px;
+  }
+  .arena-effect-line h2 {
+    font-size: 11px;
+  }
+  .arena-effect-line #bonus-status {
+    font-size: 11px;
+  }
+  .arena-effect-line #bonus-feedback {
+    margin: 0;
+    flex-basis: 100%;
   }
 }

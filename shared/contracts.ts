@@ -41,6 +41,9 @@ export const playerSchema = publicUserSchema.extend({
   room: z.string(),
   score: z.number().int().nonnegative().default(0),
   x: z.number().min(0).max(915).default(430),
+  movementSequence: z.number().int().min(-1).optional(),
+  movementStartedAt: z.number().optional(),
+  sampledAt: z.number().optional(),
   slowedUntil: z.number().optional(),
   feedback: z
     .object({

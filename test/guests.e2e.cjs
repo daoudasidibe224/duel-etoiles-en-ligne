@@ -79,7 +79,6 @@ const { createApp } = require("../dist/src/app"),
   try {
     const ca = await context(1440),
       cb = await context(390);
-    await cb.addInitScript(() => { const original = HTMLCanvasElement.prototype.getContext; HTMLCanvasElement.prototype.getContext = function(type, ...args) { return type === "webgl2" ? null : original.call(this, type, ...args); }; });
     const a = track(await ca.newPage()),
       b = track(await cb.newPage());
     for (const width of [1440, 800, 390, 320]) {
@@ -163,9 +162,9 @@ const { createApp } = require("../dist/src/app"),
     const live = instance.app.salons[room];
     live.round.stars.push({ id: require("node:crypto").randomUUID(), kind: "multiplier", x: live.utilisateurs[0].x + 22.5, bornAt: Date.now() - 450 / 140 * 1000, speed: 140 });
     await a.getByText("Points ×2 activé", { exact: true }).waitFor();
-    await a.waitForFunction(() => document.querySelector("#gameCanvas")?.dataset.renderer === "webgl-3d");
-    await b.waitForFunction(() => document.querySelector("#gameCanvas")?.dataset.renderer === "2d-fallback");
-    await b.getByText("La 3D est indisponible sur ce navigateur. Le jeu reste jouable en vue simplifiée.", { exact: true }).waitFor();
+    await a.waitForFunction(() => document.querySelector("#gameCanvas")?.dataset.renderer === "canvas-2d");
+    await b.waitForFunction(() => document.querySelector("#gameCanvas")?.dataset.renderer === "canvas-2d");
+    assert.equal(await b.locator("#renderer-notice").isVisible(), false);
     await a.waitForFunction(
       () => Number(document.querySelector("#self-score")?.textContent) >= 2,
       null,
@@ -207,7 +206,13 @@ const { createApp } = require("../dist/src/app"),
       .getByText("Partie terminée. Votre score invité reste visible ici.", {
         exact: true,
       })
-      .waitFor({ timeout: 15000 });
+      .waitFor({ timeout: 15000 }).catch(async error => {
+        console.error('Guest finish diagnostics', JSON.stringify({
+          page: await a.locator('main').innerText(),
+          state: instance.app.salons[room] && {round: instance.app.salons[room].round, players: instance.app.salons[room].utilisateurs.map(p=>({id:p.id,kind:p.kind,score:p.score}))}, errors
+        }));
+        throw error;
+      });
     assert.equal(await Score.countDocuments({ matchId: originalRound }), 0);
     assert.ok(Number(await a.locator("#self-score").textContent()) >= 2);
     await noOverflow(a);

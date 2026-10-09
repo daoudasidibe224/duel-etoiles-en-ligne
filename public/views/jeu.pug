@@ -7,6 +7,7 @@ body
       div
         p.eyebrow Duel d’étoiles · Salon de #{nomDuSalon}
         h1 Course cosmique
+        p.arena-subtitle Ramassez les étoiles. Évitez les dangers. Prenez l’avance.
       .game-toolbar
         button#share-room.button.is-outlined(type='button') Copier l’invitation
         button#sound-toggle.button.is-outlined(type='button' aria-pressed='false') Activer le son
@@ -31,16 +32,20 @@ body
           .stage-hud
             p#stage-name Étape 1 / 3 · Échauffement
             progress#stage-progress(value='0' max='90' aria-label='Progression de la manche')
+          .effect-panel.arena-effect-line
+            h2 Votre effet
+            p#bonus-status Attrapez un bonus : il s’active tout seul.
+            p#bonus-feedback(role='status' aria-live='polite')
           #arena-waiting.arena-waiting
-            img(src='/images/arena-preview.png' alt='' width='640' height='300')
+            img(src='/images/arena-preview.jpg' alt='' width='960' height='540')
             .arena-waiting-caption
               strong#waiting-title En attente du second joueur
               p#waiting-description Copiez l’invitation pour partager cette arène.
-          canvas#gameCanvas(width='960' height='540' hidden aria-label='Arène 3D. Déplacez votre robot avec les flèches gauche et droite.')
+          canvas#gameCanvas(width='960' height='540' hidden aria-label='Arène 2D. Déplacez votre pilote avec les flèches gauche et droite.')
           p#renderer-notice.recovery-notice(hidden role="status")
           .touch-controls(aria-label='Commandes du joueur')
             button#move-left.button(type='button' aria-label='Se déplacer à gauche') ←
-            span Maintenez pour vous déplacer
+            span Flèches du clavier ou appui maintenu
             button#move-right.button(type='button' aria-label='Se déplacer à droite') →
         aside.arena-sidebar(aria-label='Départ et bonus')
           #menuDepart.menu
@@ -50,10 +55,6 @@ body
             p.nbJoueur
             button#btnDepart.button.cacher Jouer
           section.bonus-controls(aria-label='Objets et effet actif')
-            .effect-panel
-              h2 Votre effet
-              p#bonus-status Attrapez un bonus : il s’active tout seul.
-              p#bonus-feedback(role='status' aria-live='polite')
             .collect-panel
               h2 À ramasser
               .points-guide
@@ -102,7 +103,7 @@ body
             summary Règles et bonus
             p Une manche dure 90 secondes. Ramassez une étoile pour gagner 1 point, une dorée pour en gagner 3. Le rythme accélère à chaque étape.
             p Les bonus s’activent au contact. Un nouveau bonus remplace le précédent. Le bouclier disparaît après un impact ; la flaque ralentit pendant 4 secondes.
-            p Évitez les météorites (−3) et les blocs (−2). Un bloc reste au sol 3 secondes. Le score ne descend jamais sous zéro. Les objets sont partagés : le robot le plus proche les ramasse.
+            p Évitez les météorites (−3) et les blocs (−2). Un bloc reste au sol 3 secondes. Le score ne descend jamais sous zéro. Les objets sont partagés : le pilote le plus proche les ramasse.
             p Une coupure permet une reprise pendant 12 secondes ; quitter met fin à la manche.
           p#game-status(role='status')
           button#retry-score.button.is-outlined.cacher(type='button') Réessayer l’enregistrement

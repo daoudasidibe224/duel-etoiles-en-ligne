@@ -123,16 +123,16 @@ test("ralentissement temporaire et accélération modifient la vitesse serveur",
   const f = fixture();
   f.item("slime");
   f.tick();
-  assert.equal(runnerSpeed(f.players[0], f.now()), 150);
+  assert.equal(runnerSpeed(f.players[0], f.now()), 275);
   f.item("sprint");
   f.tick();
-  assert.equal(runnerSpeed(f.players[0], f.now()), 225);
+  assert.equal(runnerSpeed(f.players[0], f.now()), 412.5);
   f.tick(4001);
-  assert.equal(runnerSpeed(f.players[0], f.now()), 450);
+  assert.equal(runnerSpeed(f.players[0], f.now()), 825);
   const start = f.players[0].x;
   f.arena.move("a", { runningLeft: false, runningRight: true });
   f.tick(100);
-  assert.equal(f.players[0].x, start + 45);
+  assert.equal(f.players[0].x, start + 82.5);
   f.arena.halt("a");
   const stopped = f.players[0].x;
   f.tick(100);
@@ -177,4 +177,66 @@ test("le robot le plus proche reçoit l’objet quand les deux se chevauchent", 
   f.tick();
   assert.equal(f.players[0].score, 0);
   assert.equal(f.players[1].score, 3);
+});
+
+test("une traversée complète prend 1,67 s, puis gauche/droite et arrêt restent immédiats", () => {
+  const f = fixture();
+  f.players[0].x = 0;
+  f.arena.move("a", { runningLeft: false, runningRight: true }, 0);
+  for (let n = 0; n < 33; n++) {
+    f.round.stars = [];
+    f.tick();
+  }
+  assert.equal(f.players[0].x, 907.5);
+  f.tick(14);
+  assert.equal(f.players[0].x, 915);
+  f.arena.move("a", { runningLeft: true, runningRight: false }, 1);
+  f.tick();
+  assert.equal(f.players[0].x, 887.5);
+  f.arena.move("a", { runningLeft: true, runningRight: true }, 2);
+  f.tick();
+  assert.equal(f.players[0].x, 887.5);
+  f.arena.move("a", { runningLeft: false, runningRight: false }, 3);
+  f.tick();
+  assert.equal(f.players[0].x, 887.5);
+  assert.equal(f.players[0].movementSequence, 3);
+  assert.equal(f.players[0].sampledAt, f.now());
+});
+test("l’expiration d’un sprint et du ralentissement garde la distance exacte pendant un tick", () => {
+  const f = fixture();
+  f.players[0].x = 0;
+  f.players[0].bonus = { kind: "sprint", stage: 0, expiresAt: f.now() + 100 };
+  f.players[0].slowedUntil = f.now() + 150;
+  f.arena.move("a", { runningLeft: false, runningRight: true });
+  f.tick(200);
+  // 100 ms at 412.5, 50 ms at 275, then 50 ms at 550 units/s.
+  assert.equal(f.players[0].x, 82.5);
+  assert.equal(f.players[0].bonus, undefined);
+  assert.equal(f.players[0].slowedUntil, undefined);
+});
+test("un sprint traverse un danger entre deux ticks retardés sans passer au travers", () => {
+  const f = fixture();
+  f.players[0].x = 100;
+  f.players[0].score = 6;
+  f.players[0].bonus = { kind: "sprint", stage: 0, expiresAt: f.now() + 8000 };
+  const meteor = f.item("meteor", 222.5);
+  f.arena.move("a", { runningLeft: false, runningRight: true });
+  f.tick(250);
+  assert.equal(f.players[0].x, 306.25);
+  assert.equal(f.players[0].score, 3);
+  assert.ok(!f.round.stars.includes(meteor));
+  f.tick();
+  assert.equal(f.players[0].score, 3);
+});
+test("la collision balayée respecte le moment où l’objet arrive à hauteur du robot", () => {
+  const f = fixture();
+  f.players[0].x = 100;
+  f.players[0].score = 6;
+  f.players[0].bonus = { kind: "sprint", stage: 0, expiresAt: f.now() + 8000 };
+  const meteor = f.item("meteor", 122.5);
+  meteor.bornAt = f.now() - (310 / meteor.speed) * 1000;
+  f.arena.move("a", { runningLeft: false, runningRight: true });
+  f.tick(250);
+  assert.equal(f.players[0].score, 6);
+  assert.ok(f.round.stars.includes(meteor));
 });

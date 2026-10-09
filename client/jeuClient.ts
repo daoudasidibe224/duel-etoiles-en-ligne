@@ -19,7 +19,7 @@ import {
   runnerSpeed,
 } from "../shared/progression";
 import { ArenaRenderer } from "./arenaRenderer";
-import { smoothPosition } from "./motion";
+import { LocalMotion, smoothPosition } from "./motion";
 import { accessEnded, bindSessionResume, element, canvasElement } from "./dom";
 const client: Socket<ServerEvents, ClientEvents> = io("/jeu", {
   transports: ["websocket"],
@@ -68,6 +68,7 @@ class Runner {
   slowedUntil: number | undefined;
   feedback: Player["feedback"];
   x: number;
+  motion: LocalMotion;
   targetX: number;
   local = false;
   sampledAt = Date.now();
@@ -85,16 +86,19 @@ class Runner {
     x: number,
   ) {
     this.x = x;
+    this.motion = new LocalMotion(x);
     this.targetX = x;
   }
   update(dt: number) {
     const direction =
       Number(this.state.runningRight) - Number(this.state.runningLeft);
-    this.x = smoothPosition(
-      { ...this, direction, speed: runnerSpeed(this) },
-      dt,
-      Date.now(),
-    );
+    this.x = this.local
+      ? this.motion.advance(Date.now(), this)
+      : smoothPosition(
+          { ...this, direction, speed: runnerSpeed(this) },
+          dt,
+          Date.now(),
+        );
   }
 }
 const others = new Map<string, Runner>();
@@ -193,6 +197,7 @@ function stop() {
   if (self) {
     self.state.runningLeft = false;
     self.state.runningRight = false;
+    self.motion.freeze(self.x);
   }
 }
 function finish() {
@@ -201,19 +206,7 @@ function finish() {
   start.classList.add("cacher");
   stop();
   end.style.display = "block";
-  const opponent = others.values().next().value;
-  if (!opponent) {
-    element("resultat").textContent = "L’autre joueur a quitté la partie.";
-    return;
-  }
-  element("resultat").textContent =
-    self.score === opponent.score
-      ? "Égalité, belle partie !"
-      : self.score > opponent.score
-        ? "Vous avez gagné !"
-        : `${opponent.name} a gagné.`;
   element("monScore").textContent = `Votre score : ${self.score}`;
-  element("autreScore").textContent = `${opponent.name} : ${opponent.score}`;
   status.textContent =
     self.kind === "guest"
       ? "Partie terminée. Votre score invité reste visible ici."
@@ -224,6 +217,19 @@ function finish() {
     "cacher",
     self.kind === "guest" || !currentRound?.saveError,
   );
+  const opponent = others.values().next().value;
+  if (!opponent) {
+    element("resultat").textContent = "L’autre joueur a quitté la partie.";
+    element("autreScore").textContent = "";
+    return;
+  }
+  element("resultat").textContent =
+    self.score === opponent.score
+      ? "Égalité, belle partie !"
+      : self.score > opponent.score
+        ? "Vous avez gagné !"
+        : `${opponent.name} a gagné.`;
+  element("autreScore").textContent = `${opponent.name} : ${opponent.score}`;
 }
 function draw() {
   if (!running) return;
@@ -357,11 +363,20 @@ client.on("roomData", (payload) => {
       );
       self.score = player.score;
       self.kind = player.kind;
+      if (running) self.x = self.motion.advance(Date.now(), self);
       self.bonus = player.bonus;
       self.local = true;
       self.targetX = player.x;
       self.sampledAt = Date.now();
       self.slowedUntil = player.slowedUntil;
+      if (running) {
+        self.motion.receive(player, Date.now());
+        self.x = self.motion.x;
+        canvas.dataset.movementSequence = String(self.motion.acceptedSequence);
+      } else {
+        self.x = player.x;
+        self.motion.reset(player.x);
+      }
       if (player.feedback?.id !== self.feedback?.id && player.feedback) {
         element("bonus-feedback").textContent = player.feedback.text;
         element("bonus-feedback").setAttribute(
@@ -411,6 +426,7 @@ client.on("init", (payload) => {
   running = true;
   lastFrame = 0;
   self.x = self.targetX;
+  self.motion.reset(self.x);
   menu.style.display = "none";
   end.style.display = "none";
   updateHud();
@@ -447,13 +463,16 @@ client.on("roundEnded", (payload) => {
       runner.score = player.score;
       runner.x = player.x;
       runner.targetX = player.x;
+      runner.motion.freeze(player.x);
+      runner.state.runningLeft = false;
+      runner.state.runningRight = false;
     }
   }
   remaining = 0;
   stars = [];
+  finish();
   updateHud();
   renderArena();
-  finish();
 });
 client.on("score", (payload) => {
   const parsed = scoreSchema.safeParse(payload);
@@ -487,11 +506,16 @@ function move(direction: "left" | "right", pressed: boolean) {
     self.state.idRight = true;
     self.state.idLeft = false;
   }
-  if (pressed) self.sampledAt = Date.now();
+  const now = Date.now(),
+    inputSequence = sequence++;
+  const movementDirection =
+    Number(self.state.runningRight) - Number(self.state.runningLeft);
+  self.motion.input(movementDirection, inputSequence, now, self);
+  self.x = self.motion.x;
   client.emit("deplacementMonJoueur", {
     etat: self.state,
     roundId: currentRound?.id,
-    sequence: sequence++,
+    sequence: inputSequence,
   });
 }
 for (const type of ["keydown", "keyup"])
@@ -529,6 +553,12 @@ for (const [id, direction] of [
 window.addEventListener("blur", () => {
   move("left", false);
   move("right", false);
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    move("left", false);
+    move("right", false);
+  }
 });
 window.addEventListener("resize", () => {
   if (!running && currentRound && renderer) renderArena();

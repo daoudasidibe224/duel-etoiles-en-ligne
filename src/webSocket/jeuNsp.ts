@@ -444,7 +444,9 @@ export default function game(
           idRight: input.idRight === true,
           dead: input.dead === true,
         };
-        arenas.get(member.player.room)?.move(user.id, etat);
+        arenas
+          .get(member.player.room)
+          ?.move(user.id, etat, parsed.data.sequence);
         socket
           .to(member.player.room)
           .emit("deplacementMonJoueur", { id: user.id, etat });

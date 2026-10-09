@@ -143,7 +143,7 @@ test("la page initiale annonce l’attente et ne présente pas de faux score adv
   assert.match(html, /id="other-name">Place libre</);
   assert.match(html, /id="other-score"[^>]*>—</);
   assert.match(html, /id="gameCanvas"[^>]*hidden/);
-  assert.match(html, /src="\/images\/arena-preview.png"/);
+  assert.match(html, /src="\/images\/arena-preview.jpg"/);
 });
 
 test("l’aperçu suit attente, arrivée, départ, reprise, fin et restauration", async () => {
