@@ -3,7 +3,12 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { LocalMotion, smoothPosition } from "../client/motion";
 import { playerSchema, roundSchema, type Player } from "../shared/contracts";
-import { runnerSpeed } from "../shared/progression";
+import {
+  JUMP_DURATION_MS,
+  JUMP_HEIGHT,
+  jumpOffset,
+  runnerSpeed,
+} from "../shared/progression";
 import { Arena } from "../src/services/arena";
 const effects = {};
 function snapshot(
@@ -232,4 +237,211 @@ test("la position finale reste figée malgré une prédiction active et un paque
   motion.reset(430, 1600);
   motion.input(1, 0, 1600, effects);
   assert.equal(motion.advance(1700, effects), 485);
+});
+
+test("le saut est immédiat, un maintien ou un appui en l’air ne programme aucun second saut", () => {
+  const motion = new LocalMotion(430, 1000);
+  motion.input(0, 0, 1000, effects, true);
+  assert.equal(motion.jumpStartedAt, 1000);
+  assert.equal(jumpOffset(motion, 1000 + JUMP_DURATION_MS / 2), JUMP_HEIGHT);
+  motion.input(1, 1, 1100, effects, true);
+  motion.input(1, 2, 1150, effects, false);
+  motion.input(1, 3, 1200, effects, true);
+  assert.equal(motion.jumpStartedAt, 1000);
+  assert.equal(jumpOffset(motion, 1000 + JUMP_DURATION_MS), 0);
+  motion.input(0, 4, 1000 + JUMP_DURATION_MS + 100, effects, true);
+  assert.equal(motion.jumpStartedAt, 1000);
+  motion.input(0, 5, 1000 + JUMP_DURATION_MS + 110, effects, false);
+  motion.input(0, 6, 1000 + JUMP_DURATION_MS + 120, effects, true);
+  assert.equal(motion.jumpStartedAt, 1000 + JUMP_DURATION_MS + 120);
+});
+
+test("les confirmations du saut gardent la prédiction malgré 150 ms RTT et des horloges différentes", () => {
+  const motion = new LocalMotion(430, 1000);
+  motion.input(0, 0, 1000, effects, true);
+  motion.input(0, 1, 1050, effects, false);
+  const ack = { ...snapshot(430, 0, 10075), jumpStartedAt: 10075 };
+  motion.receive(ack, 1150);
+  assert.equal(motion.acceptedSequence, 0);
+  assert.equal(motion.jumpStartedAt, 1000);
+  motion.receive({ ...snapshot(430, 1, 10125), jumpStartedAt: 10075 }, 1200);
+  assert.equal(motion.jumpStartedAt, 1000);
+  motion.input(0, 2, 1800, effects, true);
+  // A snapshot from the preceding command must replay the pending new press.
+  motion.receive(
+    { ...snapshot(430, 1, 10125, 10725), jumpStartedAt: 10075 },
+    1810,
+  );
+  assert.equal(motion.jumpStartedAt, 1800);
+  motion.receive({ ...snapshot(430, 2, 10875), jumpStartedAt: 10875 }, 1950);
+  assert.equal(motion.jumpStartedAt, 1800);
+  motion.receive(ack, 2000);
+  assert.equal(motion.jumpStartedAt, 1800);
+});
+
+test("un saut refusé par le serveur est retiré sans relancer les commandes en attente", () => {
+  const motion = new LocalMotion(430, 1000);
+  motion.input(0, 0, 1000, effects, true);
+  motion.input(1, 1, 1100, effects, true);
+  motion.receive(snapshot(430, 0, 10075), 1150);
+  assert.equal(motion.jumpStartedAt, undefined);
+  motion.receive(snapshot(430, 1, 10175), 1250);
+  assert.equal(motion.jumpStartedAt, undefined);
+  motion.freeze(430, 1300);
+  assert.equal(motion.acceptedSequence, -1);
+  motion.input(0, 2, 1400, effects, true);
+  assert.equal(motion.jumpStartedAt, undefined);
+  motion.reset(430, 1500);
+  motion.input(0, 0, 1500, effects, true);
+  assert.equal(motion.jumpStartedAt, 1500);
+});
+
+test("un ACK tardif de saut ne change pas la vitesse d’un déplacement continu", () => {
+  const motion = new LocalMotion(430, 1000);
+  motion.input(1, 0, 1000, effects);
+  motion.advance(1150, effects);
+  motion.receive(snapshot(430, 0, 10075), 1150);
+  motion.advance(1200, effects);
+  motion.input(1, 1, 1200, effects, true);
+  motion.advance(1450, effects);
+  motion.advance(1500, effects);
+  // The jump arrives 150ms later than the first command; horizontal motion is unchanged.
+  motion.receive({ ...snapshot(581.25, 1, 10350), jumpStartedAt: 10350 }, 1500);
+  const before = motion.x;
+  assert.equal(
+    motion.jumpStartedAt,
+    1200,
+    "an accepted jump keeps its predicted phase",
+  );
+  assert.ok(
+    Math.abs(motion.advance(1500 + 1000 / 60, effects) - before - 550 / 60) <
+      1e-8,
+  );
+  motion.receive(
+    { ...snapshot(608.75, 1, 10350, 10400), jumpStartedAt: 10350 },
+    1550,
+  );
+  assert.equal(motion.jumpStartedAt, 1200);
+});
+
+test("le jitter, les bonus et les chevauchements gardent des images continues et un arrêt exact", () => {
+  for (const modifier of ["normal", "sprint", "slime", "expiry"] as const) {
+    let elapsed = 0;
+    const player = snapshot(430, -1, 10000);
+    if (modifier === "sprint" || modifier === "expiry")
+      player.bonus = {
+        kind: "sprint",
+        stage: 0,
+        expiresAt: modifier === "expiry" ? 10700 : 18000,
+      };
+    if (modifier === "slime" || modifier === "expiry")
+      player.slowedUntil = modifier === "expiry" ? 10850 : 18000;
+    const round = roundSchema.parse({
+      id: randomUUID(),
+      startedAt: 10000,
+      endsAt: 100000,
+      ended: false,
+      saved: false,
+    });
+    const deliveries: { at: number; player: Player }[] = [];
+    let lastDeliveryAt = 0,
+      deliveryIndex = 0;
+    const arena = new Arena(
+      round,
+      [player],
+      () => {
+        lastDeliveryAt = Math.max(
+          lastDeliveryAt + 5,
+          elapsed + [75, 145, 95, 185, 110][deliveryIndex++ % 5],
+        );
+        deliveries.push({
+          at: lastDeliveryAt,
+          player: structuredClone(player),
+        });
+      },
+      () => 10000 + elapsed,
+    );
+    arena.stop();
+    const motion = new LocalMotion(430, 1000);
+    const modifierEffects = {
+      bonus: player.bonus,
+      slowedUntil: player.slowedUntil,
+    };
+    const inputs = [
+      { at: 0, processedAt: 75, direction: 1, jumping: false },
+      { at: 120, processedAt: 305, direction: 1, jumping: true },
+      { at: 250, processedAt: 360, direction: 1, jumping: false },
+      { at: 500, processedAt: 645, direction: 0, jumping: false },
+      { at: 550, processedAt: 650, direction: -1, jumping: false },
+      { at: 900, processedAt: 1085, direction: -1, jumping: true },
+      { at: 950, processedAt: 1090, direction: -1, jumping: false },
+      { at: 1200, processedAt: 1275, direction: 0, jumping: false },
+    ];
+    let direction = 0;
+    let delivered = 0;
+    let maxReceiveDelta = 0;
+    let maxReceiveJumpDelta = 0;
+    for (elapsed = 0; elapsed <= 1800; elapsed += 5) {
+      const command = inputs.findIndex((input) => input.at === elapsed);
+      if (command >= 0) {
+        const input = inputs[command];
+        direction = input.direction;
+        motion.input(
+          direction,
+          command,
+          1000 + elapsed,
+          modifierEffects,
+          input.jumping,
+        );
+      }
+      const processed = inputs.findIndex(
+        (input) => input.processedAt === elapsed,
+      );
+      if (processed >= 0) {
+        const input = inputs[processed];
+        arena.move(
+          "a",
+          {
+            runningLeft: input.direction === -1,
+            runningRight: input.direction === 1,
+            jumping: input.jumping,
+          },
+          processed,
+        );
+      }
+      const before = motion.x;
+      const after = motion.advance(1000 + elapsed, modifierEffects);
+      if (direction) {
+        assert.ok(
+          (after - before) * direction >= -1e-8,
+          modifier + " never reverses a held input",
+        );
+        assert.ok(
+          Math.abs(after - before) <= 825 * 0.005 * 1.35 + 1e-8,
+          modifier + " has no discontinuity in a moving frame",
+        );
+      }
+      while (deliveries[delivered]?.at <= elapsed) {
+        const beforeReceive = motion.x;
+        const beforeJump = jumpOffset(motion, 1000 + elapsed);
+        motion.receive(deliveries[delivered++].player, 1000 + elapsed);
+        maxReceiveDelta = Math.max(maxReceiveDelta, Math.abs(motion.x - beforeReceive));
+        maxReceiveJumpDelta = Math.max(maxReceiveJumpDelta, Math.abs(jumpOffset(motion, 1000 + elapsed) - beforeJump));
+      }
+      if (elapsed % 50 === 0) {
+        round.stars = [];
+        // An unrelated runner forces a tick without changing this player's state.
+        arena.halt("nobody");
+      }
+    }
+    assert.ok(
+      Math.abs(motion.x - player.x) < 1e-8,
+      modifier + " converges to the real authoritative stop",
+    );
+    console.log("ACK continuity", modifier, { maxReceiveDelta, maxReceiveJumpDelta });
+    assert.ok(maxReceiveDelta <= 3, modifier + " has no horizontal ACK teleport");
+    assert.ok(maxReceiveJumpDelta <= 1, modifier + " has no vertical ACK teleport");
+    assert.equal(motion.acceptedSequence, 7);
+    assert.equal(jumpOffset(motion, 2800), 0);
+  }
 });

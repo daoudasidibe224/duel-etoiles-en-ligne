@@ -72,6 +72,7 @@ class Runner {
   slowedUntil: number | undefined;
   feedback: Player["feedback"];
   x: number;
+  jumpStartedAt: number | undefined;
   motion: LocalMotion;
   targetX: number;
   local = false;
@@ -82,6 +83,7 @@ class Runner {
     idLeft: false,
     idRight: true,
     dead: false,
+    jumping: false,
   };
   constructor(
     public id: string,
@@ -94,6 +96,7 @@ class Runner {
     this.targetX = x;
   }
   update(dt: number) {
+    if (this.local) this.jumpStartedAt = this.motion.jumpStartedAt;
     const direction =
       Number(this.state.runningRight) - Number(this.state.runningLeft);
     this.x = this.local
@@ -161,6 +164,13 @@ function updateHud() {
         : 0,
     ),
   );
+  const bonusIcon = element("bonus-icon") as HTMLImageElement;
+  const iconKind = currentRound?.ended
+    ? undefined
+    : (active?.kind ??
+      (self && (self.slowedUntil ?? 0) > Date.now() ? "slime" : undefined));
+  bonusIcon.hidden = !iconKind;
+  if (iconKind) bonusIcon.src = `/images/items/${iconKind}.svg`;
   element("bonus-status").textContent = currentRound?.ended
     ? "Manche terminée."
     : active
@@ -171,9 +181,9 @@ function updateHud() {
     (self?.feedback && Date.now() - self.feedback.at > 3000)
   )
     element("bonus-feedback").textContent = "";
-  if (self && (self.slowedUntil ?? 0) > Date.now())
-    element("bonus-status").textContent +=
-      ` · Ralenti ${Math.ceil((self.slowedUntil! - Date.now()) / 1000)} s`;
+  if (!currentRound?.ended && self && (self.slowedUntil ?? 0) > Date.now())
+    element("bonus-status").textContent =
+      `${active ? `${element("bonus-status").textContent} · ` : ""}Vitesse ÷2 · ${Math.ceil((self.slowedUntil! - Date.now()) / 1000)} s`;
   const waiting = !currentRound;
   element("arena-waiting").hidden = !waiting;
   canvas.hidden = waiting;
@@ -219,9 +229,13 @@ function stop() {
   clearInterval(timer);
   if (animation !== undefined) cancelAnimationFrame(animation);
   clearInterval(soundTimer);
+  sequence = 0;
+  canvas.dataset.movementSequence = "-1";
   if (self) {
     self.state.runningLeft = false;
     self.state.runningRight = false;
+    self.state.jumping = false;
+    self.jumpStartedAt = undefined;
     self.motion.freeze(self.x);
   }
 }
@@ -284,6 +298,7 @@ function renderArena(dt = 0, now = Date.now()) {
     })),
     stars,
     now,
+    currentRound,
   );
 }
 client.on("identity", (id) => {
@@ -326,6 +341,13 @@ client.on("disconnect", () => {
 client.on("roomData", (payload) => {
   const parsed = gameRoomSchema.safeParse(payload);
   if (!parsed.success) return;
+  if (
+    parsed.data.round &&
+    currentRound &&
+    parsed.data.round.id !== currentRound.id &&
+    parsed.data.round.startedAt <= currentRound.startedAt
+  )
+    return;
   const players =
     parsed.data.round?.ended &&
     currentRound?.id === parsed.data.round.id &&
@@ -354,6 +376,7 @@ client.on("roomData", (payload) => {
           idLeft: false,
           idRight: true,
           dead: false,
+          jumping: false,
         };
       }
   }
@@ -398,10 +421,12 @@ client.on("roomData", (payload) => {
       if (running) {
         self.motion.receive(player, Date.now());
         self.x = self.motion.x;
+        self.jumpStartedAt = self.motion.jumpStartedAt;
         canvas.dataset.movementSequence = String(self.motion.acceptedSequence);
       } else {
         self.x = player.x;
-        self.motion.reset(player.x);
+        self.jumpStartedAt = player.jumpStartedAt;
+        self.motion.reset(player.x, Date.now(), player.jumpStartedAt);
       }
       if (player.feedback?.id !== self.feedback?.id && player.feedback) {
         element("bonus-feedback").textContent = player.feedback.text;
@@ -429,6 +454,7 @@ client.on("roomData", (payload) => {
       other.score = player.score;
       other.bonus = player.bonus;
       other.targetX = player.x;
+      other.jumpStartedAt = player.jumpStartedAt;
       other.slowedUntil = player.slowedUntil;
       other.feedback = player.feedback;
     }
@@ -441,9 +467,14 @@ client.on("init", (payload) => {
     !parsed.success ||
     parsed.data.ended ||
     !self ||
-    (running && currentRound?.id === parsed.data.id)
+    (running && currentRound?.id === parsed.data.id) ||
+    (currentRound &&
+      parsed.data.id !== currentRound.id &&
+      parsed.data.startedAt <= currentRound.startedAt)
   )
     return;
+  const resumedRound = currentRound?.id === parsed.data.id;
+  const resumedJump = resumedRound ? self.jumpStartedAt : undefined;
   stop();
   currentRound = parsed.data;
   finalPlayers = undefined;
@@ -454,10 +485,13 @@ client.on("init", (payload) => {
   running = true;
   lastFrame = 0;
   self.x = self.targetX;
-  self.motion.reset(self.x);
+  self.motion.reset(self.x, Date.now(), resumedJump);
+  self.jumpStartedAt = resumedJump;
   for (const runner of [self, ...others.values()]) {
     runner.state.runningLeft = false;
     runner.state.runningRight = false;
+    runner.state.jumping = false;
+    if (runner !== self && !resumedRound) runner.jumpStartedAt = undefined;
   }
   if (rules.open) rules.close();
   menu.style.display = "none";
@@ -478,6 +512,12 @@ client.on("init", (payload) => {
 client.on("roundEnded", (payload) => {
   const parsed = gameRoomSchema.safeParse(payload);
   if (!parsed.success || !parsed.data.round?.ended) return;
+  if (
+    currentRound &&
+    parsed.data.round.id !== currentRound.id &&
+    parsed.data.round.startedAt <= currentRound.startedAt
+  )
+    return;
   currentRound = parsed.data.round;
   finalPlayers = parsed.data.utilisateurs;
   for (const player of parsed.data.utilisateurs) {
@@ -497,6 +537,8 @@ client.on("roundEnded", (payload) => {
       runner.x = player.x;
       runner.targetX = player.x;
       runner.motion.freeze(player.x);
+      runner.jumpStartedAt = undefined;
+      runner.state.jumping = false;
       runner.state.runningLeft = false;
       runner.state.runningRight = false;
     }
@@ -539,17 +581,38 @@ function move(direction: "left" | "right", pressed: boolean) {
     self.state.idRight = true;
     self.state.idLeft = false;
   }
+  sendInput();
+}
+function jump(pressed: boolean) {
+  if (!self || !running || self.state.jumping === pressed) return;
+  self.state.jumping = pressed;
+  sendInput();
+}
+function sendInput() {
+  if (!self || !running || !currentRound) return;
   const now = Date.now(),
     inputSequence = sequence++;
   const movementDirection =
     Number(self.state.runningRight) - Number(self.state.runningLeft);
-  self.motion.input(movementDirection, inputSequence, now, self);
+  self.motion.input(
+    movementDirection,
+    inputSequence,
+    now,
+    self,
+    self.state.jumping,
+  );
   self.x = self.motion.x;
+  self.jumpStartedAt = self.motion.jumpStartedAt;
   client.emit("deplacementMonJoueur", {
     etat: self.state,
-    roundId: currentRound?.id,
+    roundId: currentRound.id,
     sequence: inputSequence,
   });
+}
+function releaseInputs() {
+  move("left", false);
+  move("right", false);
+  jump(false);
 }
 for (const type of ["keydown", "keyup"])
   document.addEventListener(type, (event) => {
@@ -560,18 +623,29 @@ for (const type of ["keydown", "keyup"])
       return;
     const horizontal = ["ArrowLeft", "ArrowRight"].includes(event.key);
     // A release still stops a held direction after focus moves into a panel.
-    if (horizontal && type === "keyup")
-      move(event.key === "ArrowLeft" ? "left" : "right", false);
+    if (type === "keyup") {
+      if (horizontal) move(event.key === "ArrowLeft" ? "left" : "right", false);
+      if (event.key === "ArrowUp") jump(false);
+    }
     if (!running) return;
     if (event.target instanceof Element) {
-      if (event.target.closest(
-        "input,textarea,select,[contenteditable]:not([contenteditable=false]),dialog,[role=dialog]",
-      )) return;
-      if (event.target.closest("button,a,summary") && !event.target.closest(".arena-shell")) return;
+      if (
+        event.target.closest(
+          "input,textarea,select,[contenteditable]:not([contenteditable=false]),dialog,[role=dialog]",
+        )
+      )
+        return;
+      if (
+        event.target.closest("button,a,summary") &&
+        !event.target.closest(".arena-shell")
+      )
+        return;
     }
     event.preventDefault();
-    if (horizontal && type === "keydown")
-      move(event.key === "ArrowLeft" ? "left" : "right", true);
+    if (type === "keydown") {
+      if (horizontal) move(event.key === "ArrowLeft" ? "left" : "right", true);
+      if (event.key === "ArrowUp" && !event.repeat) jump(true);
+    }
   });
 for (const [id, direction] of [
   ["move-left", "left"],
@@ -595,14 +669,24 @@ for (const [id, direction] of [
   for (const type of ["pointerup", "pointercancel", "lostpointercapture"])
     button.addEventListener(type, () => move(direction, false));
 }
-window.addEventListener("blur", () => {
-  move("left", false);
-  move("right", false);
+const jumpButton = element("jump-button");
+jumpButton.addEventListener("pointerdown", (event) => {
+  event.preventDefault();
+  if (event instanceof PointerEvent) {
+    try {
+      jumpButton.setPointerCapture(event.pointerId);
+    } catch {
+      /* Un événement simulé peut ne pas avoir de pointeur actif. */
+    }
+  }
+  jump(true);
 });
+for (const type of ["pointerup", "pointercancel", "lostpointercapture"])
+  jumpButton.addEventListener(type, () => jump(false));
+window.addEventListener("blur", releaseInputs);
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
-    move("left", false);
-    move("right", false);
+    releaseInputs();
   }
 });
 window.addEventListener("resize", () => {
@@ -611,8 +695,7 @@ window.addEventListener("resize", () => {
 start.addEventListener("click", () => client.emit("startGame"));
 replay.addEventListener("click", () => client.emit("startGame"));
 rulesToggle.addEventListener("click", () => {
-  move("left", false);
-  move("right", false);
+  releaseInputs();
   if (!rules.open) rules.showModal();
 });
 closeRules.addEventListener("click", () => rules.close());

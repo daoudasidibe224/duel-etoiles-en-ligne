@@ -11,8 +11,11 @@ import {
   messageSchema,
   gameRoomSchema,
   roundSchema,
+  roomSchema,
 } from "../shared/contracts";
 import { createApp } from "../src/app";
+import { itemY } from "../shared/progression";
+import { RoomJournal } from "../src/services/roomJournal";
 import Utilisateur from "../src/models/Utilisateur";
 import ChatMessage from "../src/models/ChatMessage";
 import Score from "../src/models/Score";
@@ -276,28 +279,31 @@ test("une place par compte : doublons, reprise, changement de salon, départs et
     roundId: round.id,
     sequence: 2,
     id: "forged",
-    etat: { runningRight: true },
+    etat: { runningRight: true, jumping: true },
   });
   assert.equal((await moved).id, app.salons[room].proprietaireId);
   const mover = app.salons[room].utilisateurs.find(
     (player) => player.userId === app.salons[room].proprietaireId,
   )!;
   assert.equal(mover.movementSequence, 2);
+  const jumpStartedAt = mover.jumpStartedAt;
+  assert.ok(jumpStartedAt !== undefined);
+  assert.equal(jumpStartedAt, mover.movementStartedAt);
   assert.ok(mover.movementStartedAt! <= mover.sampledAt!);
   second.emit("deplacementMonJoueur", {
     roundId: round.id,
     sequence: 1,
-    etat: { runningLeft: true },
+    etat: { runningLeft: true, jumping: true },
   });
   second.emit("deplacementMonJoueur", {
     roundId: round.id,
     sequence: 2,
-    etat: { runningLeft: true },
+    etat: { runningLeft: true, jumping: true },
   });
   second.emit("deplacementMonJoueur", {
     roundId: randomUUID(),
     sequence: 3,
-    etat: { runningLeft: true },
+    etat: { runningLeft: true, jumping: true },
   });
   outsider.emit("score", { roundId: round.id, sequence: 1, score: 1 });
   second.emit("score", { roundId: round.id, sequence: 2, score: 1 });
@@ -308,6 +314,7 @@ test("une place par compte : doublons, reprise, changement de salon, départs et
   assert.equal(starts, 1);
   assert.equal(movements, 1);
   assert.equal(mover.movementSequence, 2);
+  assert.equal(mover.jumpStartedAt, jumpStartedAt);
   assert.equal(scores, 0);
   const acknowledged = new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(
@@ -338,11 +345,21 @@ test("une place par compte : doublons, reprise, changement de salon, départs et
   const resumeInit = socketEvent(refresh, "init", roundSchema);
   assert.equal(await refresh.emitWithAck("join", { room }), undefined);
   assert.equal((await resumeInit).id, round.id);
+  assert.equal(
+    mover.jumpStartedAt,
+    jumpStartedAt,
+    "la reconnexion conserve la trajectoire en cours",
+  );
   assert.equal(app.salons[room].utilisateurs.length, 2);
   const ended = socketEvent(second, "roundEnded", gameRoomSchema);
   await ended;
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(app.salons[room].round?.ended, true);
+  assert.ok(
+    app.salons[room].utilisateurs.every(
+      (player) => player.jumpStartedAt === undefined,
+    ),
+  );
   for (let i = 0; i < 4; i++) {
     assert.equal(
       await second.emitWithAck("scoreFinDeJeu", { roundId: round.id }),
@@ -637,26 +654,25 @@ test("progression, étoiles communes et bonus ne se rejouent pas après reprise"
     const live = fresh.app.salons[room],
       player = live.utilisateurs[0];
     assert.equal(player.score, 1, "première étoile ramassée automatiquement");
-    const now = Date.now();
-    live.round!.stars.push({
-      id: randomUUID(),
-      kind: "multiplier",
-      x: player.x + 22.5,
-      bornAt: now - (450 / 140) * 1000,
-      speed: 140,
-    });
+    const contactItem = (kind: "multiplier" | "star", id = randomUUID()) => {
+      const now = Date.now();
+      const item = { id, kind, x: player.x + 22.5, bornAt: now, speed: 140 };
+      let low = now - (450 / 140) * 1000,
+        high = now;
+      for (let index = 0; index < 40; index++) {
+        item.bornAt = (low + high) / 2;
+        if (itemY(item, now, live.round) > 450) low = item.bornAt;
+        else high = item.bornAt;
+      }
+      live.round!.stars.push(item);
+    };
+    contactItem("multiplier");
     await new Promise((resolve) => setTimeout(resolve, 100));
     const expiry = player.bonus?.expiresAt;
     assert.ok(expiry);
     assert.equal(player.bonus?.kind, "multiplier");
     const objectId = randomUUID();
-    live.round!.stars.push({
-      id: objectId,
-      kind: "star",
-      x: player.x + 22.5,
-      bornAt: Date.now() - (450 / 140) * 1000,
-      speed: 140,
-    });
+    contactItem("star", objectId);
     await new Promise((resolve) => setTimeout(resolve, 100));
     const claim = { roundId: round.id, sequence: 2, starId: objectId };
     assert.equal(await owner.emitWithAck("score", claim), undefined);
@@ -713,6 +729,80 @@ test("progression, étoiles communes et bonus ne se rejouent pas après reprise"
   } finally {
     clients.forEach((client) => client.disconnect());
     await new Promise<void>((resolve) => fresh.io.close(() => resolve()));
+  }
+});
+
+test("la reprise du journal annule aussi le saut de la manche interrompue", async () => {
+  const journal = await RoomJournal.open({ leaseMs: 3000 });
+  const now = Date.now(),
+    roomId = randomUUID(),
+    roundId = randomUUID();
+  await mongoose.connection
+    .db!.collection<{ _id: string; expires: Date; session: string }>("sessions")
+    .insertOne({
+      _id: "recovery-session",
+      expires: new Date(now + 86400000),
+      session: JSON.stringify({
+        cookie: { expires: new Date(now + 86400000) },
+        passport: { user: "recovery-owner" },
+      }),
+    });
+  const room = roomSchema.parse({
+    id: roomId,
+    nomProprietaire: "recovery_owner",
+    proprietaireId: "recovery-owner",
+    createdAt: now,
+    started: true,
+    startedAt: now,
+    utilisateurs: [
+      {
+        id: "recovery-owner",
+        userId: "recovery-owner",
+        nomUtilisateur: "recovery_owner",
+        room: roomId,
+        score: 7,
+        jumpStartedAt: now,
+      },
+    ],
+    round: {
+      id: roundId,
+      startedAt: now,
+      endsAt: now + 90000,
+      ended: false,
+      saved: false,
+    },
+  });
+  try {
+    await journal.sync(
+      { [roomId]: room },
+      new Map([
+        [
+          "recovery-owner",
+          {
+            sessionId: "recovery-session",
+            expiresAt: now + 86400000,
+          },
+        ],
+      ]),
+      new Map([[roomId, "recovery-session"]]),
+    );
+  } finally {
+    await journal.close();
+  }
+  const restored = await RoomJournal.open({ leaseMs: 3000 });
+  try {
+    assert.equal(restored.restored[roomId].interruptedRoundId, roundId);
+    assert.equal(restored.restored[roomId].round, undefined);
+    assert.equal(
+      restored.restored[roomId].utilisateurs[0].jumpStartedAt,
+      undefined,
+    );
+    assert.equal(restored.restored[roomId].utilisateurs[0].score, 0);
+  } finally {
+    await restored.close();
+    await mongoose.connection
+      .db!.collection<{ _id: string }>("sessions")
+      .deleteOne({ _id: "recovery-session" });
   }
 });
 

@@ -3,7 +3,14 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { Arena } from "../src/services/arena";
 import { playerSchema, roundSchema, type Star } from "../shared/contracts";
-import { itemY, runnerSpeed, PILOT_CONTACT_TOP } from "../shared/progression";
+import {
+  itemY,
+  runnerSpeed,
+  PILOT_CONTACT_TOP,
+  jumpOffset,
+  JUMP_DURATION_MS,
+  JUMP_HEIGHT,
+} from "../shared/progression";
 function fixture() {
   let now = 10000;
   const players = [
@@ -250,4 +257,115 @@ test("le contact commence à la tête de l’avatar réduit, à 402 unités de c
   f.tick(8);
   assert.equal(f.players[0].score, 1);
   assert.equal(f.arena.collect("a", star.id), 0);
+});
+
+test("le saut suit une parabole, un appui maintenu ou en l’air ne prépare pas un autre saut", () => {
+  const f = fixture();
+  const jump = (jumping: boolean, sequence: number) =>
+    f.arena.move(
+      "a",
+      {
+        runningLeft: false,
+        runningRight: false,
+        jumping,
+      },
+      sequence,
+    );
+  jump(true, 0);
+  const launched = f.players[0].jumpStartedAt!;
+  assert.equal(launched, f.now());
+  f.tick(JUMP_DURATION_MS / 2);
+  assert.equal(jumpOffset(f.players[0], f.now()), JUMP_HEIGHT);
+  jump(false, 1);
+  jump(true, 2);
+  assert.equal(f.players[0].jumpStartedAt, launched);
+  f.tick(JUMP_DURATION_MS / 2 + 50);
+  assert.equal(jumpOffset(f.players[0], f.now()), 0);
+  jump(true, 3);
+  assert.equal(
+    f.players[0].jumpStartedAt,
+    launched,
+    "maintenir ne relance jamais",
+  );
+  jump(false, 4);
+  jump(true, 5);
+  assert.equal(f.players[0].jumpStartedAt, f.now());
+  assert.equal(f.players[0].movementSequence, 5);
+  f.round.ended = true;
+  jump(false, 6);
+  assert.equal(
+    f.players[0].movementSequence,
+    5,
+    "une manche terminée ne reçoit plus d’entrées",
+  );
+});
+
+test("le saut ramasse en hauteur, l’aimant et le bouclier gardent leurs règles en l’air", () => {
+  const f = fixture();
+  f.arena.move("a", { runningLeft: false, runningRight: false, jumping: true });
+  f.tick(350);
+  const high = (kind: Star["kind"], x = f.players[0].x + 22.5) => {
+    const item = f.item(kind, x);
+    item.bornAt = f.now() - (340 / item.speed) * 1000;
+    return item;
+  };
+  f.players[0].bonus = { kind: "magnet", stage: 0, expiresAt: f.now() + 8000 };
+  high("gold", f.players[0].x + 102.5);
+  const remoteDanger = high("meteor", f.players[0].x + 102.5);
+  f.tick(20);
+  assert.equal(f.players[0].score, 3);
+  assert.ok(f.round.stars.includes(remoteDanger));
+  f.players[0].bonus = { kind: "shield", stage: 0, expiresAt: f.now() + 8000 };
+  high("slime");
+  f.tick(20);
+  assert.equal(f.players[0].bonus, undefined);
+  assert.equal(f.players[0].slowedUntil, undefined);
+  assert.equal(f.players[0].feedback?.text, "Bouclier : obstacle bloqué");
+  high("meteor");
+  f.tick(20);
+  assert.equal(f.players[0].score, 0);
+});
+
+test("un obstacle au sol peut être sauté mais touche le robot après sa réception", () => {
+  const f = fixture();
+  f.players[0].score = 5;
+  f.arena.move("a", { runningLeft: false, runningRight: false, jumping: true });
+  f.tick(350);
+  const block = f.item("barrier");
+  block.bornAt = f.now() - (500 / block.speed) * 1000;
+  f.tick(100);
+  assert.ok(f.round.stars.includes(block));
+  assert.equal(f.players[0].score, 5);
+  f.tick(300);
+  assert.ok(!f.round.stars.includes(block));
+  assert.equal(f.players[0].score, 3);
+});
+
+test("une chute rapide touche pendant le saut entre deux ticks, sans toucher un objet déjà dépassé", () => {
+  const f = fixture();
+  f.arena.move("a", { runningLeft: false, runningRight: false, jumping: true });
+  f.tick(250);
+  const star = f.item("gold");
+  star.speed = 3000;
+  star.bornAt = f.now() - (200 / star.speed) * 1000;
+  f.tick(150);
+  assert.equal(f.players[0].score, 3);
+  assert.ok(!f.round.stars.includes(star));
+  const past = f.item("meteor");
+  past.speed = 3000;
+  past.bornAt = f.now() - (520 / past.speed) * 1000;
+  f.tick(50);
+  assert.equal(f.players[0].score, 3);
+});
+
+test("les robots se traversent en mouvement et pendant leur saut", () => {
+  const f = fixture();
+  f.players[0].x = 430;
+  f.players[1].x = 460;
+  f.arena.move("a", { runningLeft: false, runningRight: true, jumping: true });
+  f.arena.move("b", { runningLeft: true, runningRight: false });
+  f.tick(100);
+  assert.equal(f.players[0].x, 485);
+  assert.equal(f.players[1].x, 405);
+  assert.ok(jumpOffset(f.players[0], f.now()) > 0);
 });

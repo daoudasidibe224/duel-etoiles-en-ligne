@@ -44,6 +44,7 @@ export const playerSchema = publicUserSchema.extend({
   movementSequence: z.number().int().min(-1).optional(),
   movementStartedAt: z.number().optional(),
   sampledAt: z.number().optional(),
+  jumpStartedAt: z.number().optional(),
   slowedUntil: z.number().optional(),
   feedback: z
     .object({
@@ -88,6 +89,7 @@ export const stateSchema = z.object({
   idLeft: z.boolean(),
   idRight: z.boolean(),
   dead: z.boolean(),
+  jumping: z.boolean().default(false),
 });
 export type PlayerState = z.infer<typeof stateSchema>;
 export const actionSchema = z.object({

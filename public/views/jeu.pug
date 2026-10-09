@@ -36,12 +36,14 @@ body.game-body
           .stage-hud
             p#stage-name Étape 1 / 3 · Échauffement
             progress#stage-progress(value='0' max='90' aria-label='Progression de la manche')
-          p#bonus-status Attrapez un bonus : il s’active tout seul.
+          .bonus-readout
+            img#bonus-icon(src='/images/items/shield.svg' alt='' hidden width='26' height='32')
+            p#bonus-status Attrapez un bonus : il s’active tout seul.
           p#bonus-feedback(role='status' aria-live='polite')
         .arena-viewport
           #arena-waiting.arena-waiting
             img(src='/images/arena-preview.jpg' alt='' width='960' height='540')
-          canvas#gameCanvas(width='960' height='540' hidden aria-label='Arène 2D. Déplacez votre pilote avec les flèches gauche et droite.' tabindex='0')
+          canvas#gameCanvas(width='960' height='540' hidden aria-label='Arène 2D. Flèches gauche et droite pour se déplacer, flèche haut pour sauter.' tabindex='0')
           #menuDepart.game-panel
             p.panel-kicker À deux, c’est mieux
             h2#waiting-title En attente du second joueur
@@ -63,8 +65,11 @@ body.game-body
         footer.arena-controls
           .touch-controls(aria-label='Commandes du joueur')
             button#move-left.button(type='button' aria-label='Se déplacer à gauche') ←
-            span Flèches ou appui maintenu
             button#move-right.button(type='button' aria-label='Se déplacer à droite') →
+            button#jump-button.button(type='button' aria-label='Sauter')
+              span.jump-arrow(aria-hidden='true') ↑
+              span Sauter
+            small.keyboard-hint ← → déplacer · ↑ sauter
           button#rules-toggle.button.is-outlined(type='button' aria-haspopup='dialog') Règles et bonus
         .arena-status
           p#game-status(role='status')
@@ -74,43 +79,44 @@ body.game-body
             h2#rules-title Règles et bonus
             button#close-rules.button.is-outlined(type='button' aria-label='Fermer les règles') Fermer
           p.rule-intro Deux joueurs, 90 secondes. Le meilleur score gagne.
+          p.rule-controls ← → pour se déplacer, ↑ pour sauter. Vous pouvez traverser l’autre pilote et sauter par-dessus les blocs. Les objets tombent de plus en plus vite jusqu’à la fin.
           .rules-columns
             section
               h3 À ramasser
-              .points-guide
-                p
-                  span.star-symbol ★
-                  strong Étoile +1
-                p
-                  span.star-symbol.is-gold ★
-                  strong Dorée +3
-              h3 Bonus automatiques · 8 s
+              ul.item-legend.points-guide
+                li
+                  img.legend-icon(src='/images/items/star.svg' alt='' width='38' height='48')
+                  span Étoile · +1 point
+                li
+                  img.legend-icon(src='/images/items/gold.svg' alt='' width='38' height='48')
+                  span Étoile dorée · +3 points
+              h3 Bonus automatiques · 8 s maximum
               ul.item-legend
                 li
-                  span.legend-dot.sprint »
-                  span Vitesse · +50 %
+                  img.legend-icon(src='/images/items/sprint.svg' alt='' width='38' height='48')
+                  span Vitesse · déplacement 50 % plus rapide
                 li
-                  span.legend-dot.multiplier ×2
-                  span Double vos gains
+                  img.legend-icon(src='/images/items/multiplier.svg' alt='' width='38' height='48')
+                  span Points ×2 · étoiles à +2 ou +6 points
                 li
-                  span.legend-dot.shield ◈
-                  span Bloque un impact
+                  img.legend-icon(src='/images/items/shield.svg' alt='' width='38' height='48')
+                  span Bouclier · protège du prochain obstacle, puis disparaît
                 li
-                  span.legend-dot.magnet U
-                  span Attire les étoiles
+                  img.legend-icon(src='/images/items/magnet.svg' alt='' width='38' height='48')
+                  span Aimant · ramasse les étoiles proches
             section
               h3 À éviter
               ul.item-legend
                 li
-                  span.legend-dot.meteor −3
-                  span Météorite · −3 points
+                  img.legend-icon(src='/images/items/meteor.svg' alt='' width='38' height='48')
+                  span Météorite · vous fait perdre 3 points
                 li
-                  span.legend-dot.barrier −2
-                  span Bloc au sol · −2 points
+                  img.legend-icon(src='/images/items/barrier.svg' alt='' width='38' height='48')
+                  span Bloc · vous fait perdre 2 points. Sautez pour l’éviter.
                 li
-                  span.legend-dot.slime ½
-                  span Flaque · ralenti 4 s
-              p Le score ne descend jamais sous zéro. Les objets sont partagés et un nouveau bonus remplace le précédent.
+                  img.legend-icon(src='/images/items/slime.svg' alt='' width='38' height='48')
+                  span Flaque collante · vitesse divisée par 2 pendant 4 s
+              p Le bouclier bloque une météorite, un bloc ou une flaque. Le score ne descend jamais sous zéro. Un nouveau bonus remplace le précédent.
           p.rules-note Une coupure réserve votre place 12 secondes. Quitter met fin à la manche.
   script(src='/js/site.js')
   script(src='/js/jeuClient.js')

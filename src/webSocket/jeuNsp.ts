@@ -181,6 +181,7 @@ export default function game(
   const end = async (room: Rooms[string]) => {
     const round = room.round;
     if (!round || round.ended) return;
+    for (const player of room.utilisateurs) delete player.jumpStartedAt;
     participants.set(
       round.id,
       room.utilisateurs.map((player) => ({ ...player })),
@@ -404,6 +405,7 @@ export default function game(
           delete player.bonus;
           delete player.slowedUntil;
           delete player.feedback;
+          delete player.jumpStartedAt;
         });
         room.round = {
           id: randomUUID(),
@@ -456,6 +458,7 @@ export default function game(
           idLeft: input.idLeft === true,
           idRight: input.idRight === true,
           dead: input.dead === true,
+          jumping: input.jumping === true,
         };
         arenas
           .get(member.player.room)

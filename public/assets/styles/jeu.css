@@ -306,7 +306,7 @@
   align-items: center;
   gap: 12px;
 }
-.touch-controls span {
+.touch-controls .keyboard-hint {
   color: #9bb6bd;
   font-size: 11px;
 }
@@ -407,64 +407,62 @@
   margin: 0;
   font-size: 12px;
 }
-.star-symbol {
-  font-size: 22px;
-  color: #ffe09a;
-}
-.star-symbol.is-gold {
-  color: #ffbc38;
+.legend-icon {
+  flex: none;
+  width: 38px;
+  height: 48px;
+  object-fit: contain;
 }
 .item-legend {
   list-style: none;
-  margin: 0;
+  margin: 0 0 18px;
   padding: 0;
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 .item-legend li {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   font-size: 12px;
+  line-height: 1.4;
 }
-.legend-dot {
+.points-guide {
   display: grid;
-  place-items: center;
+  gap: 6px;
+}
+.rule-controls {
+  font-size: 12px;
+  color: #c9dcd2;
+  line-height: 1.5;
+  margin-bottom: 18px;
+}
+.bonus-readout {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+#bonus-icon {
   flex: none;
-  width: 28px;
+  width: 24px;
   height: 28px;
-  border: 1px solid currentColor;
-  border-radius: 8px;
-  font-weight: 600;
-  color: #9de0dd;
+  object-fit: contain;
 }
-.legend-dot.multiplier {
-  color: #c7a7ee;
+#jump-button {
+  gap: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-color: #9bbd8f;
 }
-.legend-dot.shield {
-  color: #82ddbf;
-}
-.legend-dot.magnet {
-  color: #eea6c9;
-}
-.legend-dot.meteor {
-  color: #ff8065;
-}
-.legend-dot.barrier {
-  color: #f1a373;
-}
-.legend-dot.slime {
-  color: #b6dc62;
-}
-.rules-note {
-  margin: 18px 0 0;
-  padding-top: 12px;
-  border-top: 1px solid #3a5159;
-  color: #91b0b6;
+#jump-button span {
   font-size: 11px;
+  color: #e1f0d5;
 }
-.cacher {
-  display: none !important;
+#jump-button .jump-arrow {
+  font-size: 22px;
+  line-height: 1;
 }
 @media (max-width: 600px) {
   .game-page {
@@ -569,7 +567,7 @@
     gap: 6px;
     flex: 1;
   }
-  .touch-controls span {
+  .touch-controls .keyboard-hint {
     display: none;
   }
   .arena-shell .touch-controls button {
@@ -629,5 +627,46 @@
   * {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .arena-controls {
+    gap: 6px;
+    padding: 8px;
+  }
+  .touch-controls {
+    flex: 1;
+    gap: 5px;
+    min-width: 0;
+  }
+  .arena-shell .touch-controls button {
+    min-width: 0;
+    flex: 1;
+    padding: 5px 7px;
+    min-height: 48px;
+  }
+  .touch-controls .keyboard-hint {
+    display: none;
+  }
+  #rules-toggle {
+    padding: 7px 8px;
+  }
+  #jump-button {
+    flex-direction: column;
+    gap: 0;
+  }
+  #jump-button .jump-arrow {
+    font-size: 19px;
+  }
+  #jump-button span {
+    font-size: 10px;
+  }
+  .rules-columns {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .game-rules-panel {
+    padding: 16px;
   }
 }

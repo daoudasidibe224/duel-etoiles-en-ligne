@@ -246,6 +246,12 @@ const { createApp } = require("../dist/src/app"),
     await b
       .getByText("Le propriétaire peut relancer une manche.", { exact: true })
       .waitFor();
+    const oldRoundPayload = structuredClone({
+      room,
+      ownerId: instance.app.salons[room].proprietaireId,
+      utilisateurs: instance.app.salons[room].utilisateurs,
+      round: instance.app.salons[room].round,
+    });
     await a.locator("#replay-game").click();
     await a.getByText("La partie a commencé.", { exact: true }).waitFor();
     await b.getByText("La partie a commencé.", { exact: true }).waitFor();
@@ -258,6 +264,47 @@ const { createApp } = require("../dist/src/app"),
     assert.equal(Number(await a.locator("#self-score").textContent()), 0);
     assert.equal(Number(await b.locator("#self-score").textContent()), 0);
     assert.equal(await a.locator("#finPartie").isVisible(), false);
+    assert.equal(
+      Number(
+        await a.locator("#gameCanvas").getAttribute("data-local-jump-offset"),
+      ),
+      0,
+    );
+    assert.equal(
+      Number(
+        await a.locator("#gameCanvas").getAttribute("data-movement-sequence"),
+      ),
+      -1,
+    );
+    // Late packets from a previous round cannot restore its position, jump or result.
+    oldRoundPayload.utilisateurs[0].x = 10;
+    oldRoundPayload.utilisateurs[0].jumpStartedAt = Date.now();
+    oldRoundPayload.utilisateurs[0].movementSequence = 99;
+    oldRoundPayload.utilisateurs[0].movementStartedAt = Date.now();
+    oldRoundPayload.utilisateurs[0].sampledAt = Date.now();
+    instance.io.of("/jeu").to(room).emit("roomData", oldRoundPayload);
+    instance.io
+      .of("/jeu")
+      .to(room)
+      .emit("init", { ...oldRoundPayload.round, ended: false });
+    instance.io.of("/jeu").to(room).emit("roundEnded", oldRoundPayload);
+    await a.waitForTimeout(150);
+    assert.equal(await a.locator("#finPartie").isVisible(), false);
+    assert.equal(
+      Number(
+        await a.locator("#gameCanvas").getAttribute("data-local-jump-offset"),
+      ),
+      0,
+    );
+    assert.equal(
+      Number(
+        await a.locator("#gameCanvas").getAttribute("data-movement-sequence"),
+      ),
+      -1,
+    );
+    assert.ok(
+      Number(await a.locator("#gameCanvas").getAttribute("data-local-x")) > 400,
+    );
     await a.keyboard.down("ArrowLeft");
     await a.waitForFunction(
       () =>
@@ -271,6 +318,23 @@ const { createApp } = require("../dist/src/app"),
         Number(
           document.querySelector("#gameCanvas").dataset.movementSequence,
         ) === 1,
+    );
+    await a.keyboard.down("ArrowUp");
+    await a.waitForFunction(
+      () =>
+        Number(document.querySelector("#gameCanvas").dataset.localJumpOffset) >
+        0,
+    );
+    await a.keyboard.up("ArrowUp");
+    await a.waitForFunction(
+      () =>
+        Number(
+          document.querySelector("#gameCanvas").dataset.movementSequence,
+        ) === 3,
+    );
+    assert.ok(
+      instance.app.salons[room].utilisateurs[0].jumpStartedAt >=
+        instance.app.salons[room].round.startedAt,
     );
     // La création d'un compte remplace la session invitée, sans reprendre ses points.
     await a.goto(base + "/inscription");

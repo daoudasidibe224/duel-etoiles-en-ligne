@@ -10,6 +10,9 @@ import {
   activeBonus,
   BONUS_NAMES,
   itemY,
+  itemTimeAtY,
+  jumpOffset,
+  JUMP_DURATION_MS,
   PILOT_CONTACT_TOP,
   runnerTravel,
   stageAt,
@@ -37,7 +40,7 @@ export class Arena {
   private claimed = new Map<string, string>();
   private movement = new Map<
     string,
-    Pick<PlayerState, "runningLeft" | "runningRight">
+    Pick<PlayerState, "runningLeft" | "runningRight"> & { jumping?: boolean }
   >();
   constructor(
     private round: Round,
@@ -51,6 +54,7 @@ export class Arena {
       player.movementSequence = -1;
       player.movementStartedAt = this.lastTick;
       player.sampledAt = this.lastTick;
+      delete player.jumpStartedAt;
     }
     this.tick();
     this.timer = setInterval(() => this.tick(), 50);
@@ -61,14 +65,26 @@ export class Arena {
   }
   move(
     userId: string,
-    state: Pick<PlayerState, "runningLeft" | "runningRight">,
+    state: Pick<PlayerState, "runningLeft" | "runningRight"> & {
+      jumping?: boolean;
+    },
     sequence?: number,
   ) {
     // Apply elapsed movement under the previous input before replacing it.
     this.tick();
+    if (this.round.ended || this.clock() >= this.round.endsAt) return;
+    const wasJumping = this.movement.get(userId)?.jumping === true;
     this.movement.set(userId, state);
     const player = this.players.find((value) => value.userId === userId);
     if (player) {
+      if (
+        state.jumping &&
+        !wasJumping &&
+        (player.jumpStartedAt === undefined ||
+          this.lastTick >= player.jumpStartedAt + JUMP_DURATION_MS)
+      ) {
+        player.jumpStartedAt = this.lastTick;
+      }
       player.movementSequence = sequence ?? -1;
       player.movementStartedAt = this.lastTick;
       player.sampledAt = this.lastTick;
@@ -81,8 +97,7 @@ export class Arena {
   private tick() {
     const now = this.clock();
     if (this.round.ended || now >= this.round.endsAt) return;
-    const dt = Math.min(0.25, Math.max(0, (now - this.lastTick) / 1000));
-    const from = now - dt * 1000;
+    const from = Math.min(now, this.lastTick);
     const paths = new Map<string, (at: number) => number>();
     this.lastTick = now;
     const phase = stageAt(this.round, now),
@@ -91,8 +106,8 @@ export class Arena {
     this.round.stage = phase;
     const living = this.round.stars.filter((item) =>
       item.kind === "barrier"
-        ? from < item.bornAt + (460 / item.speed) * 1000 + 3000
-        : itemY(item, from) <= 535,
+        ? from < itemTimeAtY(item, 460, this.round) + 3000
+        : itemY(item, from, this.round) <= 535,
     );
     changed ||= living.length !== this.round.stars.length;
     this.round.stars = living;
@@ -112,14 +127,6 @@ export class Arena {
       player.x = positionAt(now);
       changed ||= player.x !== oldX;
       player.sampledAt = now;
-      if (player.bonus && !activeBonus(player, now)) {
-        delete player.bonus;
-        changed = true;
-      }
-      if (player.slowedUntil && player.slowedUntil <= now) {
-        delete player.slowedUntil;
-        changed = true;
-      }
     }
     if (now >= this.nextSpawn && this.round.stars.length < 20) {
       const index = this.spawned++;
@@ -128,7 +135,7 @@ export class Arena {
         kind: PATTERN[index % PATTERN.length],
         x: index === 0 ? 450 : 40 + this.random() * 860,
         bornAt: now,
-        speed: config.speed,
+        speed: STAGES[0].speed,
       });
       this.nextSpawn = now + config.interval;
       changed = true;
@@ -138,7 +145,7 @@ export class Arena {
       const candidates = this.players
         .map((player) => ({
           player,
-          distance: this.contactDistance(
+          contact: this.contactDistance(
             player,
             paths.get(player.userId)!,
             item,
@@ -146,10 +153,10 @@ export class Arena {
             now,
           ),
         }))
-        .filter((candidate) => candidate.distance !== undefined);
+        .filter((candidate) => candidate.contact !== undefined);
       candidates.sort(
         (a, b) =>
-          a.distance! - b.distance! ||
+          a.contact!.distance - b.contact!.distance ||
           (this.spawned % 2
             ? this.players
             : [...this.players].reverse()
@@ -160,15 +167,25 @@ export class Arena {
             ).indexOf(b.player),
       );
       if (candidates[0]) {
-        this.apply(candidates[0].player, item, now);
+        this.apply(candidates[0].player, item, now, candidates[0].contact!.at);
         changed = true;
       }
     }
     this.round.stars = this.round.stars.filter((item) =>
       item.kind === "barrier"
-        ? now < item.bornAt + (460 / item.speed) * 1000 + 3000
-        : itemY(item, now) <= 535,
+        ? now < itemTimeAtY(item, 460, this.round) + 3000
+        : itemY(item, now, this.round) <= 535,
     );
+    for (const player of this.players) {
+      if (player.bonus && !activeBonus(player, now)) {
+        delete player.bonus;
+        changed = true;
+      }
+      if (player.slowedUntil && player.slowedUntil <= now) {
+        delete player.slowedUntil;
+        changed = true;
+      }
+    }
     if (changed) this.publish();
   }
   private contactDistance(
@@ -178,24 +195,103 @@ export class Arena {
     from: number,
     now: number,
   ) {
-    const enter = Math.max(
-      from,
-      item.bornAt + (PILOT_CONTACT_TOP / item.speed) * 1000,
-    );
+    const enter = Math.max(from, item.bornAt);
     const exit = Math.min(
       now,
       item.kind === "barrier"
-        ? item.bornAt + (460 / item.speed) * 1000 + 3000
-        : item.bornAt + (505 / item.speed) * 1000,
+        ? itemTimeAtY(item, 460, this.round) + 3000
+        : itemTimeAtY(item, 505, this.round),
     );
     if (enter > exit) return undefined;
-    const left = Math.min(positionAt(enter), positionAt(exit)) + 22.5;
-    const right = Math.max(positionAt(enter), positionAt(exit)) + 22.5;
-    const distance = Math.max(left - item.x, item.x - right, 0);
-    const magnetic =
-      ["star", "gold"].includes(item.kind) &&
-      activeBonus(player, now)?.kind === "magnet";
-    return distance <= (magnetic ? 95 : 43) ? distance : undefined;
+    // Within these boundaries both vertical trajectories are quadratic and x is monotonic.
+    const boundaries = [
+      ...new Set(
+        [
+          enter,
+          exit,
+          this.round.startedAt,
+          this.round.endsAt,
+          player.jumpStartedAt,
+          player.jumpStartedAt === undefined
+            ? undefined
+            : player.jumpStartedAt + JUMP_DURATION_MS,
+          player.bonus?.expiresAt,
+          player.slowedUntil,
+          item.kind === "barrier"
+            ? itemTimeAtY(item, 460, this.round)
+            : undefined,
+        ].filter(
+          (at): at is number => at !== undefined && at >= enter && at <= exit,
+        ),
+      ),
+    ].sort((a, b) => a - b);
+    const heightAt = (at: number) =>
+      itemY(item, at, this.round) + jumpOffset(player, at);
+    let best: { distance: number; at: number } | undefined;
+    const check = (start: number, end: number) => {
+      const height = heightAt((start + end) / 2);
+      if (height < PILOT_CONTACT_TOP - 1e-7 || height > 505 + 1e-7) return;
+      const left = Math.min(positionAt(start), positionAt(end)) + 22.5;
+      const right = Math.max(positionAt(start), positionAt(end)) + 22.5;
+      const distance = Math.max(left - item.x, item.x - right, 0);
+      const magnetic =
+        ["star", "gold"].includes(item.kind) &&
+        activeBonus(player, start)?.kind === "magnet";
+      if (
+        distance <= (magnetic ? 95 : 43) &&
+        (!best || distance < best.distance)
+      ) {
+        const radius = magnetic ? 95 : 43;
+        let at = start;
+        if (Math.abs(positionAt(start) + 22.5 - item.x) > radius) {
+          // Find the first horizontal overlap inside this vertical contact interval.
+          const movingRight = positionAt(end) >= positionAt(start);
+          const edge = item.x + (movingRight ? -radius : radius);
+          let low = start,
+            high = end;
+          for (let iteration = 0; iteration < 40; iteration++) {
+            const middle = (low + high) / 2;
+            if (positionAt(middle) + 22.5 < edge === movingRight) low = middle;
+            else high = middle;
+          }
+          at = high;
+        }
+        best = { distance, at };
+      }
+    };
+    // Split at exact roots of head/feet contact; no samples can skip a fast object.
+    for (let index = 1; index < boundaries.length; index++) {
+      const start = boundaries[index - 1],
+        end = boundaries[index];
+      const y0 = heightAt(start),
+        ym = heightAt((start + end) / 2),
+        y1 = heightAt(end);
+      const a = 2 * (y1 + y0 - 2 * ym),
+        b = y1 - y0 - a;
+      const cuts = [0, 1];
+      for (const edge of [PILOT_CONTACT_TOP, 505]) {
+        const c = y0 - edge;
+        if (Math.abs(a) < 1e-7) {
+          if (Math.abs(b) > 1e-7) cuts.push(-c / b);
+        } else {
+          const discriminant = b * b - 4 * a * c;
+          if (discriminant >= 0) {
+            cuts.push(
+              (-b - Math.sqrt(discriminant)) / (2 * a),
+              (-b + Math.sqrt(discriminant)) / (2 * a),
+            );
+          }
+        }
+      }
+      const times = cuts
+        .filter((part) => part >= 0 && part <= 1)
+        .sort((a, b) => a - b)
+        .map((part) => start + part * (end - start));
+      for (let cut = 1; cut < times.length; cut++)
+        check(times[cut - 1], times[cut]);
+    }
+    if (enter === exit) check(enter, exit);
+    return best;
   }
   private inReach(player: Player, item: Star, now: number) {
     const distance = Math.abs(player.x + 22.5 - item.x);
@@ -204,14 +300,15 @@ export class Arena {
       activeBonus(player, now)?.kind === "magnet";
     return (
       distance <= (magnetic ? 95 : 43) &&
-      itemY(item, now) >= PILOT_CONTACT_TOP &&
-      itemY(item, now) <= 505
+      itemY(item, now, this.round) + jumpOffset(player, now) >=
+        PILOT_CONTACT_TOP &&
+      itemY(item, now, this.round) + jumpOffset(player, now) <= 505
     );
   }
-  private apply(player: Player, item: Star, now: number) {
+  private apply(player: Player, item: Star, now: number, contactAt = now) {
     this.claimed.set(item.id, player.userId);
     this.round.stars = this.round.stars.filter((value) => value.id !== item.id);
-    const bonus = activeBonus(player, now),
+    const bonus = activeBonus(player, contactAt),
       oldScore = player.score;
     let text = "",
       good = true;
@@ -227,12 +324,12 @@ export class Arena {
     ) {
       if (bonus?.kind === "shield") {
         delete player.bonus;
-        text = "Bouclier : impact absorbé";
+        text = "Bouclier : obstacle bloqué";
       } else {
         good = false;
         if (item.kind === "slime") {
           player.slowedUntil = Math.min(this.round.endsAt, now + 4000);
-          text = "Ralenti · 4 s";
+          text = "Vitesse ÷2 · 4 s";
         } else {
           player.score = Math.max(
             0,

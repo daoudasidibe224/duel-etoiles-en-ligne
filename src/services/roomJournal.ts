@@ -185,6 +185,7 @@ export class RoomJournal {
             const reset = { ...player, score: 0, usedStages: [] };
             delete reset.bonus;
             delete reset.slowedUntil;
+            delete reset.jumpStartedAt;
             delete reset.feedback;
             reset.x = 430;
             return reset;

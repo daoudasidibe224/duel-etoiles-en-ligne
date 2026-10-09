@@ -12,6 +12,7 @@ const MongoStore = require(
 ).default;
 const { createApp } = require(path.join(root, "dist/src/app"));
 const { chromium } = require("playwright");
+const { itemY } = require(path.join(root, "dist/shared/progression"));
 const assert = require("node:assert/strict");
 (async () => {
   const mongo = await MongoMemoryServer.create();
@@ -173,7 +174,18 @@ const assert = require("node:assert/strict");
   await two.getByText("La partie a commencé.", { exact: true }).waitFor();
   assert.equal(await two.locator("#self-name").textContent(), "qa_two");
   const live = app.salons[matchUrl.split("/").pop()];
-  live.round.stars.push({ id: require("node:crypto").randomUUID(), kind: "multiplier", x: live.utilisateurs[0].x + 22.5, bornAt: Date.now() - 450 / 140 * 1000, speed: 140 });
+  const contactItem = (kind) => {
+    const now = Date.now();
+    const item = { id: require("node:crypto").randomUUID(), kind, x: live.utilisateurs[0].x + 22.5, bornAt: now, speed: 140 };
+    let low = now - 5000, high = now;
+    for (let i = 0; i < 40; i++) {
+      item.bornAt = (low + high) / 2;
+      if (itemY(item, now, live.round) > 450) low = item.bornAt;
+      else high = item.bornAt;
+    }
+    live.round.stars.push(item);
+  };
+  contactItem("multiplier");
   await one.getByText("Points ×2 activé", { exact: true }).waitFor();
   assert.equal(await one.locator("#bonus-multiplier").count(), 0);
   await one.waitForFunction(() => document.querySelector("#gameCanvas")?.dataset.renderer === "canvas-2d");
@@ -210,10 +222,10 @@ const assert = require("node:assert/strict");
   await one
     .getByText("Étape 2 / 3 · Pluie cosmique", { exact: true })
     .waitFor({ timeout: 35000 });
-  live.round.stars.push({ id: require("node:crypto").randomUUID(), kind: "sprint", x: live.utilisateurs[0].x + 22.5, bornAt: Date.now() - 450 / 140 * 1000, speed: 140 });
+  contactItem("sprint");
   await one.getByText("Vitesse +50 % activée", { exact: true }).waitFor();
   await one.getByText("Étape 3 / 3 · Dernière rafale", { exact: true }).waitFor({ timeout: 37000 });
-  live.round.stars.push({ id: require("node:crypto").randomUUID(), kind: "shield", x: live.utilisateurs[0].x + 22.5, bornAt: Date.now() - 450 / 140 * 1000, speed: 140 });
+  contactItem("shield");
   await one.getByText("Bouclier activé", { exact: true }).waitFor();
   await one
     .getByText("Score enregistré. Retrouvez cette partie dans vos scores.", {

@@ -1,5 +1,5 @@
-import type { Player, Star } from "../shared/contracts";
-import { activeBonus, itemY } from "../shared/progression";
+import type { Player, Round, Star } from "../shared/contracts";
+import { activeBonus, itemY, jumpOffset } from "../shared/progression";
 import {
   ARENA_WIDTH,
   ARENA_HEIGHT,
@@ -7,20 +7,13 @@ import {
   PILOT_FLOOR,
   PILOT_TOP,
 } from "./arenaLayout";
-export const ITEM_COLORS: Record<Star["kind"], string> = {
-  star: "#ffe09a",
-  gold: "#ffbc38",
-  sprint: "#70daef",
-  multiplier: "#bc9ff0",
-  shield: "#82ddbf",
-  magnet: "#eea6c9",
-  meteor: "#ff8065",
-  slime: "#b6dc62",
-  barrier: "#f1a373",
-};
+import { ITEM_ICONS } from "../shared/itemIcons";
+export const ITEM_COLORS = Object.fromEntries(
+  Object.entries(ITEM_ICONS).map(([kind, icon]) => [kind, icon.color]),
+) as Record<Star["kind"], string>;
 export type VisualRunner = Pick<
   Player,
-  "id" | "x" | "bonus" | "slowedUntil" | "feedback"
+  "id" | "x" | "bonus" | "slowedUntil" | "feedback" | "jumpStartedAt"
 > & {
   color: string;
   moving: boolean;
@@ -70,109 +63,31 @@ function line(c: Brush, points: number[][], color: string, width = 2) {
   c.lineJoin = "round";
   c.stroke();
 }
-function star(c: Brush, radius: number, color: string) {
-  c.beginPath();
-  for (let i = 0; i < 10; i++) {
-    const a = (i * Math.PI) / 5 - Math.PI / 2,
-      r = i % 2 ? radius * 0.48 : radius;
-    if (i) c.lineTo(Math.cos(a) * r, Math.sin(a) * r);
-    else c.moveTo(Math.cos(a) * r, Math.sin(a) * r);
-  }
-  c.closePath();
-  c.fillStyle = color;
-  c.fill();
-  c.strokeStyle = "#fff0b9";
-  c.lineWidth = 2;
-  c.stroke();
-}
 function symbol(c: Brush, kind: Star["kind"], color: string, size = 20) {
-  c.fillStyle = color;
-  c.strokeStyle = color;
-  c.lineWidth = 4;
-  if (kind === "shield") {
-    c.beginPath();
-    c.moveTo(-13, -13);
-    c.quadraticCurveTo(0, -20, 13, -13);
-    c.lineTo(11, 4);
-    c.quadraticCurveTo(8, 14, 0, 19);
-    c.quadraticCurveTo(-8, 14, -11, 4);
-    c.closePath();
-    c.stroke();
-    line(
-      c,
-      [
-        [-6, 0],
-        [-1, 5],
-        [7, -5],
-      ],
-      color,
-      3,
-    );
-  } else if (kind === "magnet") {
-    c.beginPath();
-    c.moveTo(-11, -14);
-    c.lineTo(-11, 4);
-    c.arc(0, 4, 11, Math.PI, 0, true);
-    c.lineTo(11, -14);
-    c.stroke();
-    line(
-      c,
-      [
-        [-11, -14],
-        [-11, -5],
-      ],
-      "#fff5ef",
-      5,
-    );
-    line(
-      c,
-      [
-        [11, -14],
-        [11, -5],
-      ],
-      "#fff5ef",
-      5,
-    );
-  } else if (kind === "sprint") {
-    line(
-      c,
-      [
-        [-12, -12],
-        [-2, 0],
-        [-12, 12],
-      ],
-      color,
-      4,
-    );
-    line(
-      c,
-      [
-        [2, -12],
-        [12, 0],
-        [2, 12],
-      ],
-      color,
-      4,
-    );
-  } else {
-    c.font = `700 ${size}px "Chakra", sans-serif`;
-    c.textAlign = "center";
-    c.textBaseline = "middle";
-    c.fillText(
-      (
-        {
-          gold: "+3",
-          multiplier: "×2",
-          barrier: "−2",
-          meteor: "−3",
-          slime: "½",
-          star: "",
-        } as Partial<Record<Star["kind"], string>>
-      )[kind] ?? "",
-      0,
-      1,
-    );
+  const icon = ITEM_ICONS[kind];
+  c.save();
+  c.scale(size / 32, size / 32);
+  c.translate(-32, -32);
+  for (const shape of icon.paths) {
+    const path = new Path2D(shape.d);
+    if (shape.fill) {
+      c.fillStyle = shape.fill;
+      c.fill(path);
+    }
+    c.strokeStyle = shape.stroke ?? color;
+    c.lineWidth = shape.width ?? 2.5;
+    c.lineCap = "round";
+    c.lineJoin = "round";
+    c.stroke(path);
   }
+  if (kind === "multiplier") {
+    c.font = "700 27px sans-serif";
+    c.textAlign = "center";
+    c.textBaseline = "alphabetic";
+    c.fillStyle = "#eee0ff";
+    c.fillText("×2", 34, 48);
+  }
+  c.restore();
 }
 function backdrop(c: Brush) {
   const sky = c.createLinearGradient(0, 0, 0, 540);
@@ -317,79 +232,27 @@ function backdrop(c: Brush) {
   );
 }
 function pickup(c: Brush, kind: Star["kind"]) {
-  const color = ITEM_COLORS[kind];
-  if (kind === "star" || kind === "gold") {
-    star(c, kind === "gold" ? 24 : 19, color);
-    if (kind === "gold") {
-      c.save();
-      c.translate(0, 36);
-      pill(c, -20, -12, 40, 24, 8, "#43351f");
-      symbol(c, "gold", "#ffe49e", 20);
-      c.restore();
-    }
-  } else if (kind === "meteor") {
-    c.fillStyle = "#9b5141";
-    c.beginPath();
-    for (let i = 0; i < 9; i++) {
-      const a = (i * Math.PI * 2) / 9,
-        r = i % 2 ? 25 : 29;
-      if (i) c.lineTo(Math.cos(a) * r, Math.sin(a) * r);
-      else c.moveTo(Math.cos(a) * r, Math.sin(a) * r);
-    }
-    c.closePath();
-    c.fill();
-    c.strokeStyle = "#ffc28a";
-    c.lineWidth = 2;
-    c.stroke();
-    ellipse(c, -9, -9, 7, 5, "#663f39");
-    ellipse(c, 12, 6, 6, 6, "#713c32");
-    line(
+  const icon = ITEM_ICONS[kind],
+    danger = ["meteor", "barrier", "slime"].includes(kind);
+  if (icon.frame !== false)
+    pill(
       c,
-      [
-        [-8, 19],
-        [0, 6],
-        [7, 11],
-        [19, -12],
-      ],
-      "#ffb074",
-      3,
+      -30.5,
+      -30.5,
+      61,
+      61,
+      13,
+      danger ? "#352b2e" : "#15303d",
+      icon.color,
     );
-    c.save();
-    c.translate(0, 43);
-    pill(c, -20, -12, 40, 24, 8, "#542d32");
-    symbol(c, kind, "#ffc0a4", 21);
-    c.restore();
-  } else if (kind === "barrier") {
-    pill(c, -28, -20, 56, 40, 9, "#754a39", "#f0aa73");
-    c.save();
-    c.beginPath();
-    c.roundRect(-25, -17, 50, 34, 6);
-    c.clip();
-    for (let x = -50; x < 70; x += 22)
-      line(
-        c,
-        [
-          [x, -19],
-          [x - 22, 19],
-        ],
-        "#e79754",
-        9,
-      );
-    c.restore();
-    pill(c, -18, -13, 36, 26, 6, "#432d2a");
-    symbol(c, kind, "#ffe0c0", 21);
-  } else if (kind === "slime") {
-    ellipse(c, 0, 11, 37, 14, "#badb6180");
-    ellipse(c, 0, 4, 30, 13, "#badb61");
-    ellipse(c, -12, 0, 7, 6, "#ddec9f");
-    symbol(c, kind, "#304e29", 23);
-  } else {
-    const gradient = c.createLinearGradient(0, -28, 0, 28);
-    gradient.addColorStop(0, "#365667");
-    gradient.addColorStop(1, "#1e3046");
-    pill(c, -27, -28, 54, 56, 16, gradient, color);
-    pill(c, -18, -25, 36, 3, 2, color);
-    symbol(c, kind, color, 25);
+  symbol(c, kind, icon.color, 32);
+  if (icon.value && kind !== "multiplier") {
+    pill(c, -17, 26, 34, 21, 7, "#10252f", icon.color);
+    c.font = "700 17px sans-serif";
+    c.textAlign = "center";
+    c.textBaseline = "alphabetic";
+    c.fillStyle = icon.color;
+    c.fillText(icon.value, 0, 42);
   }
 }
 function pilot(
@@ -448,7 +311,7 @@ function pilot(
   );
   pill(c, -23, -62, 46, 8, 3, dark);
   pill(c, -5, -63, 10, 10, 3, "#e4e9ce");
-  // Head ends at y330, matching the swept pickup contact band.
+  // The shared contact height follows the pilot’s head.
   pill(
     c,
     amber ? -32 : -29,
@@ -489,34 +352,6 @@ function pilot(
       3,
     );
   c.restore();
-  const bonus = activeBonus(p, now);
-  if (bonus?.kind === "shield") {
-    c.beginPath();
-    c.ellipse(0, -79, 62, 94, 0, 0, Math.PI * 2);
-    c.fillStyle = "#82ddbf12";
-    c.fill();
-    c.strokeStyle = "#a7efdba0";
-    c.lineWidth = 3;
-    c.stroke();
-  }
-  if (bonus?.kind === "sprint" && p.moving && !reduced)
-    for (let i = 0; i < 3; i++)
-      line(
-        c,
-        [
-          [-p.facing * 45, -50 - i * 17],
-          [-p.facing * (64 + i * 8), -50 - i * 17],
-        ],
-        "#70daef",
-        3,
-      );
-  if (bonus?.kind === "multiplier") {
-    c.save();
-    c.translate(36, -169);
-    pill(c, -21, -13, 42, 26, 7, "#47395f");
-    symbol(c, "multiplier", "#e1caff", 22);
-    c.restore();
-  }
 }
 export class ArenaRenderer {
   private context: Brush | null;
@@ -561,7 +396,12 @@ export class ArenaRenderer {
       this.sprites.set(kind, sprite);
     }
   }
-  render(players: VisualRunner[], items: Star[], now = Date.now()) {
+  render(
+    players: VisualRunner[],
+    items: Star[],
+    now = Date.now(),
+    round?: Round,
+  ) {
     const c = this.context;
     if (!c || this.disposed) return;
     const bounds = this.canvas.getBoundingClientRect();
@@ -610,7 +450,7 @@ export class ArenaRenderer {
     for (const item of items)
       if (
         ["meteor", "barrier", "slime"].includes(item.kind) &&
-        itemY(item, now) > 270
+        itemY(item, now, round) > 270
       ) {
         const x = viewX(item.x);
         ellipse(c, x, 493, 29, 6, ITEM_COLORS[item.kind] + "35");
@@ -637,15 +477,10 @@ export class ArenaRenderer {
       state.stride += Math.abs(p.x - state.x) * 0.045;
       state.x = p.x;
       const x = viewX(p.x + 22.5),
-        close = players.some(
-          (other) => other.id !== p.id && Math.abs(other.x - p.x) < 36,
-        ),
-        offset = close ? (p.local ? 17 : -17) : 0;
+        lift = jumpOffset(p, now);
+      if (p.local) this.canvas.dataset.localJumpOffset = lift.toFixed(2);
       c.save();
-      c.translate(
-        Math.max(25, Math.min(worldWidth - 25, x + offset)),
-        PILOT_FLOOR,
-      );
+      c.translate(x, PILOT_FLOOR);
       ellipse(c, 0, 3, 22, 5, "#071d2b66");
       c.beginPath();
       c.ellipse(
@@ -660,6 +495,105 @@ export class ArenaRenderer {
       c.strokeStyle = p.color;
       c.lineWidth = p.local ? 2 : 1;
       c.stroke();
+      c.translate(0, -lift);
+      const bonus = activeBonus(p, now),
+        blocked =
+          p.feedback?.text.startsWith("Bouclier :") &&
+          now - p.feedback.at < 700;
+      if (bonus?.kind === "shield" || blocked) {
+        c.beginPath();
+        c.ellipse(0, -44, 33, 56, 0, 0, Math.PI * 2);
+        c.fillStyle = blocked ? "#b5ffe969" : "#65e5bc2b";
+        c.fill();
+        c.strokeStyle = blocked ? "#f2ffcd" : "#83f9ce";
+        c.lineWidth = blocked ? 5 : 3;
+        c.stroke();
+        c.beginPath();
+        c.ellipse(0, -44, 37, 60, 0, 0, Math.PI * 2);
+        c.strokeStyle = "#8bf2cc50";
+        c.lineWidth = 3;
+        c.stroke();
+        if (blocked)
+          for (let i = 0; i < 8; i++) {
+            const angle = (i * Math.PI) / 4;
+            line(
+              c,
+              [
+                [Math.cos(angle) * 37, -44 + Math.sin(angle) * 60],
+                [Math.cos(angle) * 46, -44 + Math.sin(angle) * 69],
+              ],
+              "#d4ffe3",
+              3,
+            );
+          }
+      }
+      if (bonus?.kind === "sprint" && p.moving) {
+        for (let i = 0; i < 3; i++)
+          line(
+            c,
+            [
+              [-p.facing * 27, -24 - i * 18],
+              [-p.facing * (48 + i * 6), -24 - i * 18],
+            ],
+            "#70daefd9",
+            3,
+          );
+      }
+      if (bonus?.kind === "magnet") {
+        const radius = (95 * (900 / 960) * worldWidth) / 960;
+        c.beginPath();
+        c.ellipse(0, -42, radius, 51, 0, 0, Math.PI * 2);
+        c.setLineDash([6, 7]);
+        c.strokeStyle = "#efa6c9a0";
+        c.lineWidth = 2;
+        c.stroke();
+        c.setLineDash([]);
+        for (const direction of [-1, 1])
+          line(
+            c,
+            [
+              [direction * (radius - 9), -44],
+              [direction * (radius - 22), -44],
+              [direction * (radius - 16), -50],
+            ],
+            "#ffd0e5",
+            2,
+          );
+      }
+      if (bonus) {
+        const badgeX = p.local ? 31 : 0;
+        pill(
+          c,
+          badgeX - 13,
+          -115,
+          26,
+          26,
+          7,
+          "#102b38",
+          ITEM_COLORS[bonus.kind],
+        );
+        c.save();
+        c.translate(badgeX, -102);
+        symbol(c, bonus.kind, ITEM_COLORS[bonus.kind], 11);
+        c.restore();
+      }
+      if ((p.slowedUntil ?? 0) > now) {
+        ellipse(c, 0, 0, 24, 5, "#b6dc62b0");
+        c.save();
+        c.translate(-30, -25);
+        symbol(c, "slime", ITEM_COLORS.slime, 12);
+        c.restore();
+      }
+      if (blocked && p.local) {
+        const size = Math.max(17, (10 * worldWidth) / width);
+        c.font = `600 ${size}px "Chakra",sans-serif`;
+        c.textAlign = "center";
+        c.textBaseline = "middle";
+        const labelWidth = c.measureText("Protégé").width + 16;
+        pill(c, -labelWidth / 2, -149, labelWidth, size + 8, 6, "#173e37");
+        c.fillStyle = "#caffd9";
+        c.fillText("Protégé", 0, -145 + size / 2);
+      }
       c.save();
       c.scale(0.55, 0.55);
       pilot(c, p, state.stride, now, this.reduced);
@@ -695,10 +629,10 @@ export class ArenaRenderer {
       if (sprite)
         c.drawImage(
           sprite,
-          viewX(item.x) - 35,
-          itemY(item, now) - 31.5,
-          70,
+          viewX(item.x) - 42,
+          itemY(item, now, round) - 37.8,
           84,
+          100.8,
         );
     }
     if (this.intervals.length) {

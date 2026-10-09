@@ -34,14 +34,30 @@ const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       two = await b.newPage();
     for (const page of [one, two])
       page.on("pageerror", (e) => errors.push(e.message));
-    let relayMessages = 0;
+    let relayMessages = 0,
+      jitter = false;
+    const relayDelays = [];
+    let upstreamAt = 0,
+      downstreamAt = 0,
+      jitterIndex = 0;
+    function relay(deliver, upstream) {
+      const delay = 75 + (jitter ? [0, 70, 20, 110, 35][jitterIndex++ % 5] : 0);
+      const at = Math.max(
+        Date.now() + delay,
+        (upstream ? upstreamAt : downstreamAt) + 1,
+      );
+      if (upstream) upstreamAt = at;
+      else downstreamAt = at;
+      relayDelays.push(at - Date.now());
+      setTimeout(deliver, at - Date.now());
+    }
     await one.routeWebSocket("**/socket.io/**", (socket) => {
       const server = socket.connectToServer();
       socket.onMessage((message) => {
         relayMessages++;
-        setTimeout(() => server.send(message), 75);
+        relay(() => server.send(message), true);
       });
-      server.onMessage((message) => setTimeout(() => socket.send(message), 75));
+      server.onMessage((message) => relay(() => socket.send(message), false));
     });
     for (const [page, name] of [
       [one, "Motion_Atlas"],
@@ -99,7 +115,9 @@ const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const toolbarChecks = [];
     for (const button of ["#sound-toggle", "#share-room"]) {
       await one.locator(button).click();
-      await one.evaluate(() => window.scrollTo({ top: 150, behavior: "instant" }));
+      await one.evaluate(() =>
+        window.scrollTo({ top: 150, behavior: "instant" }),
+      );
       const toolbarScroll = await one.evaluate(() => scrollY);
       await one.keyboard.press("ArrowDown");
       await one.keyboard.press("ArrowUp");
@@ -111,24 +129,112 @@ const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       await one.keyboard.up("ArrowLeft");
       await pause(220);
       const leftToolbarMove = await rendered();
-      assert.ok(leftToolbarMove < beforeToolbarMove - 30, button + " retains left input");
+      assert.ok(
+        leftToolbarMove < beforeToolbarMove - 30,
+        button + " retains left input",
+      );
       await one.keyboard.down("ArrowRight");
       await pause(100);
       await one.keyboard.up("ArrowRight");
       await pause(220);
-      assert.ok((await rendered()) > leftToolbarMove + 30, button + " retains right input");
-      toolbarChecks.push({button, scrollBefore:toolbarScroll, scrollAfter:await one.evaluate(() => scrollY)});
+      assert.ok(
+        (await rendered()) > leftToolbarMove + 30,
+        button + " retains right input",
+      );
+      toolbarChecks.push({
+        button,
+        scrollBefore: toolbarScroll,
+        scrollAfter: await one.evaluate(() => scrollY),
+      });
     }
     await one.evaluate(() => {
       document.getElementById("scroll-proof-spacer").remove();
       window.scrollTo({ top: 0, behavior: "instant" });
     });
-    const rulesStopSequence = player().movementSequence + 2;
+    await one.waitForFunction(
+      () =>
+        Number(
+          document.querySelector("#gameCanvas").dataset.localJumpOffset,
+        ) === 0,
+    );
+    const jumpSequence = player().movementSequence + 1;
+    const jumpPressedAt = Date.now();
+    jitter = true;
+    await one.keyboard.down("ArrowUp");
+    await one.waitForFunction(
+      () =>
+        Number(document.querySelector("#gameCanvas").dataset.localJumpOffset) >
+        0,
+      null,
+      { timeout: 120 },
+    );
+    const jumpVisibleMs = Date.now() - jumpPressedAt;
+    assert.ok(
+      Number(
+        await one.locator("#gameCanvas").getAttribute("data-movement-sequence"),
+      ) < jumpSequence,
+      "jump is visible before the network ACK",
+    );
+    await one.waitForFunction(
+      () =>
+        Number(document.querySelector("#gameCanvas").dataset.localJumpOffset) >
+        60,
+    );
+    fs.mkdirSync(path.join(__dirname, "../test-results"), { recursive: true });
+    await one.locator("#gameCanvas").screenshot({
+      path: path.join(__dirname, "../test-results/jump-airborne.png"),
+    });
+    await one.waitForFunction(
+      (sequence) =>
+        Number(
+          document.querySelector("#gameCanvas").dataset.movementSequence,
+        ) >= sequence,
+      jumpSequence,
+    );
+    const jumpAckWaitMs = Date.now() - jumpPressedAt;
+    assert.ok(jumpAckWaitMs >= 145, "jump ACK includes the 150ms relay floor");
+    const heldJumpStartedAt = player().jumpStartedAt;
+    await pause(850);
+    await one.keyboard.down("ArrowUp");
+    await pause(220);
+    assert.equal(
+      Number(
+        await one.locator("#gameCanvas").getAttribute("data-local-jump-offset"),
+      ),
+      0,
+    );
+    assert.equal(
+      player().jumpStartedAt,
+      heldJumpStartedAt,
+      "held up cannot jump again after landing",
+    );
+    assert.equal(
+      player().movementSequence,
+      jumpSequence,
+      "key repeats do not send another jump",
+    );
+    await one.keyboard.up("ArrowUp");
+    await pause(350);
+    await one.keyboard.down("ArrowUp");
+    await one.waitForFunction(
+      () =>
+        Number(document.querySelector("#gameCanvas").dataset.localJumpOffset) >
+        0,
+    );
+    await one.keyboard.up("ArrowUp");
+    await pause(800);
+    assert.ok(
+      player().jumpStartedAt > heldJumpStartedAt,
+      "release and a second press launch another jump",
+    );
+    const rulesStopSequence = player().movementSequence + 4;
     await one.keyboard.down("ArrowLeft");
     await pause(100);
+    await one.keyboard.down("ArrowUp");
     await one.locator("#rules-toggle").click();
     await one.locator("#game-rules-panel").waitFor({ state: "visible" });
     await one.keyboard.up("ArrowLeft");
+    await one.keyboard.up("ArrowUp");
     await one.waitForFunction(
       (sequence) =>
         Number(
@@ -165,6 +271,7 @@ const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       2,
       "typing fields keep caret navigation",
     );
+    await one.keyboard.press("ArrowUp");
     await pause(200);
     assert.equal(
       player().movementSequence,
@@ -190,18 +297,59 @@ const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     delete player().bonus;
     delete player().slowedUntil;
     instance.io.of("/jeu").to(room.id).emit("roomData", {
-      room: room.id, ownerId: room.proprietaireId,
-      utilisateurs: room.utilisateurs, round: room.round,
+      room: room.id,
+      ownerId: room.proprietaireId,
+      utilisateurs: room.utilisateurs,
+      round: room.round,
     });
     await pause(150);
+    await one.evaluate(() => {
+      window.motionFrames = [];
+      window.recordMotion = true;
+      const record = () => {
+        if (!window.recordMotion) return;
+        window.motionFrames.push({
+          at: performance.now(),
+          x: Number(document.querySelector("#gameCanvas").dataset.localX),
+        });
+        requestAnimationFrame(record);
+      };
+      requestAnimationFrame(record);
+    });
     const start = Date.now();
     await one.keyboard.down("ArrowRight");
+    await pause(250);
+    await one.keyboard.down("ArrowUp");
+    await pause(40);
+    await one.keyboard.up("ArrowUp");
     await one.waitForFunction(
       () => Number(document.querySelector("#gameCanvas").dataset.localX) > 912,
       {},
       { timeout: 2300 },
     );
     const traversalMs = Date.now() - start;
+    const movingFrames = await one.evaluate(() => {
+      window.recordMotion = false;
+      return window.motionFrames;
+    });
+    let maxMovingFrameDelta = 0;
+    for (let i = 1; i < movingFrames.length; i++) {
+      const dx = movingFrames[i].x - movingFrames[i - 1].x;
+      const dt = movingFrames[i].at - movingFrames[i - 1].at;
+      assert.ok(
+        dx >= -0.05,
+        "late jump ACK does not reverse a continuous move",
+      );
+      assert.ok(
+        dx <= ((550 * dt) / 1000) * 1.4 + 1.5,
+        "no position discontinuity while traversing: " +
+          dx +
+          " in " +
+          dt +
+          "ms",
+      );
+      maxMovingFrameDelta = Math.max(maxMovingFrameDelta, dx);
+    }
     await one.keyboard.up("ArrowRight");
     await pause(300);
     assert.ok(
@@ -236,7 +384,10 @@ const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       { timeout: 1500 },
     );
     const stopped = await rendered();
-    assert.ok(stopped > 770 && stopped < 890, "reversal position " + stopped);
+    assert.ok(
+      stopped > 730 && stopped < 912,
+      "reversal moves away from the right boundary: " + stopped,
+    );
     assert.ok(
       Math.abs(stopped - player().x) < 15,
       "render/server convergence: rendered=" +
@@ -294,23 +445,19 @@ const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     ).x;
     assert.ok(Math.abs(mobileServer - after) < 15);
     const cancelStopSequence = mobileStopSequence + 2;
-    await two
-      .locator("#move-right")
-      .dispatchEvent("pointerdown", {
-        pointerId: 10,
-        pointerType: "touch",
-        isPrimary: true,
-        button: 0,
-      });
+    await two.locator("#move-right").dispatchEvent("pointerdown", {
+      pointerId: 10,
+      pointerType: "touch",
+      isPrimary: true,
+      button: 0,
+    });
     await pause(120);
-    await two
-      .locator("#move-right")
-      .dispatchEvent("pointercancel", {
-        pointerId: 10,
-        pointerType: "touch",
-        isPrimary: true,
-        button: 0,
-      });
+    await two.locator("#move-right").dispatchEvent("pointercancel", {
+      pointerId: 10,
+      pointerType: "touch",
+      isPrimary: true,
+      button: 0,
+    });
     await two.waitForFunction(
       (sequence) =>
         Number(
@@ -335,6 +482,54 @@ const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
           cancelled,
       ) < 15,
     );
+    const mobilePlayer = () =>
+      room.utilisateurs.find((p) => p.nomUtilisateur === "motion_nova");
+    const mobileJumpSequence = mobilePlayer().movementSequence + 1;
+    const touchJump = {
+      pointerId: 11,
+      pointerType: "touch",
+      isPrimary: true,
+      button: 0,
+    };
+    await two.locator("#jump-button").dispatchEvent("pointerdown", touchJump);
+    await two.waitForFunction(
+      () =>
+        Number(document.querySelector("#gameCanvas").dataset.localJumpOffset) >
+        0,
+    );
+    await pause(900);
+    const mobileHeldJumpAt = mobilePlayer().jumpStartedAt;
+    assert.equal(
+      Number(
+        await two.locator("#gameCanvas").getAttribute("data-local-jump-offset"),
+      ),
+      0,
+    );
+    assert.equal(mobilePlayer().movementSequence, mobileJumpSequence);
+    await two.locator("#jump-button").dispatchEvent("pointercancel", touchJump);
+    await two.waitForFunction(
+      (sequence) =>
+        Number(
+          document.querySelector("#gameCanvas").dataset.movementSequence,
+        ) === sequence,
+      mobileJumpSequence + 1,
+    );
+    await two
+      .locator("#jump-button")
+      .dispatchEvent("pointerdown", { ...touchJump, pointerId: 12 });
+    await two.waitForFunction(
+      () =>
+        Number(document.querySelector("#gameCanvas").dataset.localJumpOffset) >
+        0,
+    );
+    await two
+      .locator("#jump-button")
+      .dispatchEvent("pointerup", { ...touchJump, pointerId: 12 });
+    await pause(800);
+    assert.ok(
+      mobilePlayer().jumpStartedAt > mobileHeldJumpAt,
+      "touch cancel permits a fresh jump",
+    );
     await one.evaluate(() => document.body.focus());
     const blurStopSequence = player().movementSequence + 2;
     await one.keyboard.down("ArrowLeft");
@@ -356,6 +551,7 @@ const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     assert.deepEqual(errors, []);
     await one.keyboard.down("ArrowRight");
     await pause(100);
+    await one.keyboard.down("ArrowUp");
     const finalAuthoritativeX = 321;
     player().x = finalAuthoritativeX;
     room.round.ended = true;
@@ -377,14 +573,32 @@ const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       "round end freezes authoritative position",
     );
     await one.keyboard.up("ArrowRight");
+    await one.keyboard.up("ArrowUp");
+    assert.equal(
+      Number(
+        await one.locator("#gameCanvas").getAttribute("data-local-jump-offset"),
+      ),
+      0,
+      "round end resets the jump",
+    );
     const metrics = await one
       .locator("#gameCanvas")
       .evaluate((c) => ({ ...c.dataset }));
     const output = {
       baseSpeed: 550,
       traversalMs,
+      movingFrameSamples: movingFrames.length,
+      maxMovingFrameDelta,
       expectedTraversalMs: (915 / 550) * 1000,
       injectedRttFloorMs: 150,
+      relayOneWayDelayRange: [
+        Math.min(...relayDelays),
+        Math.max(...relayDelays),
+      ],
+      jumpVisibleMs,
+      jumpAckWaitMs,
+      heldJumpDoesNotRepeat: true,
+      touchJumpCancelVerified: true,
       stopAckWaitMs,
       relayMessages,
       mobileHeldDistance: mobileX - after,

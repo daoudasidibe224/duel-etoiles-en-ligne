@@ -1,3 +1,4 @@
+require("./build-item-icons.js");
 const esbuild = require("esbuild");
 const options = {
   entryPoints: [
