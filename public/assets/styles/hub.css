@@ -231,6 +231,15 @@ select:focus {
   background: #005964;
   color: #fff;
 }
+.button:disabled,
+.button.is-primary:disabled {
+  opacity: 1;
+  color: #49616d;
+  background: #dce7eb;
+  border-color: #c3d4dc;
+  box-shadow: none;
+  transform: none;
+}
 .button.is-outlined {
   color: #006d77;
   border-color: #97b9be;
