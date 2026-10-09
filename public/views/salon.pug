@@ -17,7 +17,7 @@ body
       a.button.is-outlined(href="/salon/salonDeJeu/" + recoveredRoom.id) Reprendre votre salon
     .lobby-layout
       aside.lobby-launch(aria-labelledby='nouvelle-partie-titre')
-        img.arena-preview(src='/images/arena-preview.svg' alt='Deux robots et une étoile dans l’arène.' width='640' height='300')
+        img.arena-preview(src='/images/arena-preview.png' alt='Deux robots 3D dans une arène spatiale.' width='640' height='300')
         .launch-content
           p.eyebrow Votre propre salon
           h2#nouvelle-partie-titre Invitez un adversaire
@@ -47,8 +47,8 @@ body
       .guide-item
         span.guide-symbol(aria-hidden='true') ✦
         div
-          h3 Choisissez votre bonus
-          p Une charge par étape : accélération ou points doublés pendant 8 secondes.
+          h3 Ramassez les bonus
+          p Accélération, points doublés, bouclier ou aimant : ils s’activent tout seuls. Évitez les obstacles !
       a.discussion-link(href='/salon/discussion&jeu') Retrouvez les joueurs dans la discussion →
   script(src='/js/salonClient.js' defer)
   include includes/footer.pug

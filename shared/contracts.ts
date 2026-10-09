@@ -4,12 +4,25 @@ export const publicUserSchema = z.object({
   nomUtilisateur: z.string(),
 });
 export const bonusSchema = z.object({
-  kind: z.enum(["sprint", "multiplier"]),
+  kind: z.enum(["sprint", "multiplier", "shield", "magnet"]),
   expiresAt: z.number(),
   stage: z.number().int().min(0).max(2),
 });
 export const starSchema = z.object({
   id: z.string().uuid(),
+  kind: z
+    .enum([
+      "star",
+      "gold",
+      "sprint",
+      "multiplier",
+      "shield",
+      "magnet",
+      "meteor",
+      "slime",
+      "barrier",
+    ])
+    .default("star"),
   x: z.number().min(20).max(920),
   bornAt: z.number(),
   speed: z.number().positive(),
@@ -27,6 +40,16 @@ export const playerSchema = publicUserSchema.extend({
   kind: z.enum(["account", "guest"]).default("account"),
   room: z.string(),
   score: z.number().int().nonnegative().default(0),
+  x: z.number().min(0).max(915).default(430),
+  slowedUntil: z.number().optional(),
+  feedback: z
+    .object({
+      id: z.string().uuid(),
+      text: z.string(),
+      good: z.boolean(),
+      at: z.number(),
+    })
+    .optional(),
   bonus: bonusSchema.optional(),
   usedStages: z.array(z.number().int().min(0).max(2)).max(3).default([]),
 });

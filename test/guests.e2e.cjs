@@ -15,7 +15,7 @@ const { createApp } = require("../dist/src/app"),
   const instance = createApp({
     secret: "i".repeat(48),
     store,
-    gameOptions: { durationMs: 9000, reconnectMs: 12000 },
+    gameOptions: { durationMs: 9000, reconnectMs: 12000, random: () => 0 },
   });
   await new Promise((resolve) =>
     instance.server.listen(0, "127.0.0.1", resolve),
@@ -78,8 +78,9 @@ const { createApp } = require("../dist/src/app"),
   }
   try {
     const ca = await context(1440),
-      cb = await context(390),
-      a = track(await ca.newPage()),
+      cb = await context(390);
+    await cb.addInitScript(() => { const original = HTMLCanvasElement.prototype.getContext; HTMLCanvasElement.prototype.getContext = function(type, ...args) { return type === "webgl2" ? null : original.call(this, type, ...args); }; });
+    const a = track(await ca.newPage()),
       b = track(await cb.newPage());
     for (const width of [1440, 800, 390, 320]) {
       await b.setViewportSize({ width, height: 844 });
@@ -159,9 +160,12 @@ const { createApp } = require("../dist/src/app"),
     await noOverflow(visitor);
     await a.getByRole("button", { name: "Jouer", exact: true }).click();
     await a.getByText("La partie a commencé.", { exact: true }).waitFor();
-    await a
-      .getByRole("button", { name: "Points ×2 · 8 s", exact: true })
-      .click();
+    const live = instance.app.salons[room];
+    live.round.stars.push({ id: require("node:crypto").randomUUID(), kind: "multiplier", x: live.utilisateurs[0].x + 22.5, bornAt: Date.now() - 450 / 140 * 1000, speed: 140 });
+    await a.getByText("Points ×2 activé", { exact: true }).waitFor();
+    await a.waitForFunction(() => document.querySelector("#gameCanvas")?.dataset.renderer === "webgl-3d");
+    await b.waitForFunction(() => document.querySelector("#gameCanvas")?.dataset.renderer === "2d-fallback");
+    await b.getByText("La 3D est indisponible sur ce navigateur. Le jeu reste jouable en vue simplifiée.", { exact: true }).waitFor();
     await a.waitForFunction(
       () => Number(document.querySelector("#self-score")?.textContent) >= 2,
       null,

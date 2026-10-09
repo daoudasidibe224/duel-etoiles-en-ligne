@@ -184,6 +184,9 @@ export class RoomJournal {
           .map((player) => {
             const reset = { ...player, score: 0, usedStages: [] };
             delete reset.bonus;
+            delete reset.slowedUntil;
+            delete reset.feedback;
+            reset.x = 430;
             return reset;
           });
       }
@@ -325,7 +328,12 @@ export class RoomJournal {
     return this.pendingState && !this.stopped;
   }
   get available() {
-    return !this.stopped && !this.pendingState && this.healthy && Date.now() < this.validUntil;
+    return (
+      !this.stopped &&
+      !this.pendingState &&
+      this.healthy &&
+      Date.now() < this.validUntil
+    );
   }
   reason(room: string) {
     const entry = this.entries[room];

@@ -37,7 +37,11 @@ export function createApp({
 }: {
   secret: string;
   store?: session.Store;
-  gameOptions?: { durationMs?: number; reconnectMs?: number };
+  gameOptions?: {
+    durationMs?: number;
+    reconnectMs?: number;
+    random?: () => number;
+  };
   guestDurationMs?: number;
   sessionDurationMs?: number;
   roomJournal?: RoomJournal;

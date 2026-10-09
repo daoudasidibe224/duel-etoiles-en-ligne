@@ -11,15 +11,23 @@ import {
   type ClientEvents,
   type PlayerState,
 } from "../shared/contracts";
-import { activeBonus, stageAt, STAGES } from "../shared/progression";
+import {
+  activeBonus,
+  BONUS_NAMES,
+  stageAt,
+  STAGES,
+  runnerSpeed,
+} from "../shared/progression";
+import { ArenaRenderer } from "./arenaRenderer";
+import { smoothPosition } from "./motion";
 import { accessEnded, bindSessionResume, element, canvasElement } from "./dom";
 const client: Socket<ServerEvents, ClientEvents> = io("/jeu", {
   transports: ["websocket"],
 });
-const room = location.pathname.split("/").pop(),
-  canvas = canvasElement("gameCanvas"),
-  ctx = canvas.getContext("2d");
-if (!ctx) throw new Error("Le navigateur ne prend pas en charge le canvas.");
+const room = location.pathname.split("/").pop();
+let canvas = canvasElement("gameCanvas");
+let renderer: ArenaRenderer | undefined;
+let lastFrame = 0;
 const status = element("game-status"),
   start = element("btnDepart"),
   menu = element("menuDepart"),
@@ -54,13 +62,15 @@ function playMusic() {
   }, 600);
 }
 class Runner {
-  frame = 0;
   score = 0;
-  kind: Player["kind"] = "account";
+  kind: "account" | "guest" = "account";
   bonus: Player["bonus"];
-  usedStages: number[] = [];
+  slowedUntil: number | undefined;
+  feedback: Player["feedback"];
   x: number;
-  y = 433;
+  targetX: number;
+  local = false;
+  sampledAt = Date.now();
   state: PlayerState = {
     runningLeft: false,
     runningRight: false,
@@ -69,46 +79,24 @@ class Runner {
     dead: false,
   };
   constructor(
-    readonly id: string,
-    readonly name: string,
-    readonly color: string,
+    public id: string,
+    public name: string,
+    public color: string,
     x: number,
   ) {
     this.x = x;
+    this.targetX = x;
   }
-  update(context: CanvasRenderingContext2D) {
-    const speed = activeBonus(this)?.kind === "sprint" ? 7.5 : 5;
-    if (this.state.runningRight) this.x = Math.min(915, this.x + speed);
-    else if (this.state.runningLeft) this.x = Math.max(0, this.x - speed);
-    this.frame = (this.frame + 1) % 96;
-    const moving = this.state.runningLeft || this.state.runningRight;
-    const step = moving ? (Math.floor(this.frame / 12) % 2) * 3 : 0;
-    context.save();
-    context.translate(this.x, this.y);
-    context.fillStyle = this.color;
-    context.fillRect(6, 0, 33, 22);
-    context.fillRect(4, 24, 37, 21);
-    context.fillRect(0, 27, 5, 17);
-    context.fillRect(40, 27, 5, 17);
-    context.fillRect(8, 44, 11, 13 - step);
-    context.fillRect(26, 44, 11, 10 + step);
-    context.fillStyle = "#080b08";
-    context.fillRect(10, 5, 25, 11);
-    context.fillRect(12, 30, 21, 6);
-    context.fillStyle = "#f5ffe8";
-    const look = this.state.idLeft ? -2 : 2;
-    context.fillRect(14 + look, 8, 4, 4);
-    context.fillRect(25 + look, 8, 4, 4);
-    context.fillRect(19, 24, 7, 3);
-    context.restore();
+  update(dt: number) {
+    const direction =
+      Number(this.state.runningRight) - Number(this.state.runningLeft);
+    this.x = smoothPosition(
+      { ...this, direction, speed: runnerSpeed(this) },
+      dt,
+      Date.now(),
+    );
   }
 }
-const collecting = new Set<string>();
-const bonusRequests = new Map<
-  number,
-  { id: string; kind: "sprint" | "multiplier" }
->();
-let bonusPending = false;
 const others = new Map<string, Runner>();
 let self: Runner | undefined,
   stars: Star[] = [],
@@ -143,21 +131,19 @@ function updateHud() {
         : 0,
     ),
   );
-  element("bonus-status").textContent = active
-    ? `${active.kind === "sprint" ? "Accélération" : "Points doublés"} · ${Math.max(0, Math.ceil((active.expiresAt - Date.now()) / 1000))} s`
-    : self?.usedStages.includes(phase)
-      ? "Charge utilisée. La prochaine étape recharge le bonus."
-      : "Une charge disponible pour cette étape.";
-  for (const id of ["bonus-sprint", "bonus-multiplier"]) {
-    const button = document.getElementById(id);
-    if (button instanceof HTMLButtonElement)
-      button.disabled =
-        !running ||
-        bonusPending ||
-        Boolean(active) ||
-        Boolean(self?.usedStages.includes(phase));
-  }
-  const opponent = others.values().next().value;
+  element("bonus-status").textContent = currentRound?.ended
+    ? "Manche terminée."
+    : active
+      ? `${BONUS_NAMES[active.kind]} · ${Math.ceil((active.expiresAt - Date.now()) / 1000)} s`
+      : "Ramassez un bonus : son effet démarre tout seul.";
+  if (
+    currentRound?.ended ||
+    (self?.feedback && Date.now() - self.feedback.at > 3000)
+  )
+    element("bonus-feedback").textContent = "";
+  if (self && (self.slowedUntil ?? 0) > Date.now())
+    element("bonus-status").textContent +=
+      ` · Ralenti ${Math.ceil((self.slowedUntil! - Date.now()) / 1000)} s`;
   const waiting = !currentRound;
   element("arena-waiting").hidden = !waiting;
   canvas.hidden = waiting;
@@ -167,7 +153,9 @@ function updateHud() {
     users < 2
       ? "Copiez l’invitation pour partager cette arène."
       : "Le propriétaire du salon peut lancer la manche.";
-  element("timer-label").textContent = waiting ? "Durée prévue" : "Temps restant";
+  element("timer-label").textContent = waiting
+    ? "Durée prévue"
+    : "Temps restant";
   element("game-hud").setAttribute(
     "aria-label",
     waiting ? "Joueurs et durée prévue" : "Scores et temps restant",
@@ -176,6 +164,15 @@ function updateHud() {
   else element("countdown").setAttribute("role", "timer");
   element("self-name").textContent = self?.name || "Vous";
   element("self-score").textContent = String(self?.score || 0);
+  element("self-player").setAttribute(
+    "data-tone",
+    self?.color === "#bcf36e" ? "mint" : "amber",
+  );
+  const opponent = [...others.values()][0];
+  element("other-player").setAttribute(
+    "data-tone",
+    opponent?.color === "#ffbf47" ? "amber" : "mint",
+  );
   element("other-name").textContent = opponent?.name || "Place libre";
   const opponentScore = element("other-score");
   opponentScore.textContent = opponent ? String(opponent.score) : "—";
@@ -228,87 +225,34 @@ function finish() {
   );
 }
 function draw() {
-  if (!running || !ctx) return;
+  if (!running) return;
   if (users < 2) {
     finish();
     return;
   }
-  ctx.fillStyle = "#080e0a";
-  ctx.fillRect(0, 0, 960, 540);
-  ctx.fillStyle = "#263421";
-  for (let x = 0; x < 960; x += 48)
-    for (let y = 0; y < 490; y += 48) ctx.fillRect(x, y, 1, 1);
-  ctx.strokeStyle = "#294125";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(0, 350);
-  for (let i = 0; i < 13; i++) {
-    const x = i * 80,
-      top = 315 - (i % 3) * 50;
-    ctx.lineTo(x, top);
-    ctx.lineTo(x + 50, top);
-    ctx.lineTo(x + 50, 395);
-  }
-  ctx.lineTo(960, 395);
-  ctx.stroke();
-  ctx.fillStyle = "#788559";
-  for (const [x, y] of [
-    [80, 65],
-    [245, 145],
-    [390, 60],
-    [670, 120],
-    [830, 55],
-    [540, 205],
-  ] as const) {
-    ctx.fillRect(x, y, 5, 1);
-    ctx.fillRect(x + 2, y - 2, 1, 5);
-  }
-  ctx.strokeStyle = "#bcf36e";
-  ctx.beginPath();
-  ctx.moveTo(0, 490);
-  ctx.lineTo(960, 490);
-  ctx.stroke();
-  ctx.fillStyle = "rgba(0,0,0,.7)";
-  ctx.fillRect(0, 490, 960, 50);
-  self?.update(ctx);
-  for (const runner of others.values()) runner.update(ctx);
-  for (const star of stars) {
-    if (collecting.has(star.id)) continue;
-    const y = ((Date.now() - star.bornAt) / 1000) * star.speed;
-    if (y > 535) continue;
-    ctx.fillStyle = "#ffe94c";
-    ctx.shadowColor = "#ffe94c";
-    ctx.shadowBlur = 12;
-    ctx.beginPath();
-    for (let i = 0; i < 10; i++) {
-      const angle = (i * Math.PI) / 5 - Math.PI / 2,
-        r = i % 2 ? 4 : 9;
-      ctx.lineTo(star.x + Math.cos(angle) * r, y + Math.sin(angle) * r);
-    }
-    ctx.closePath();
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    if (
-      self &&
-      star.x + 9 > self.x &&
-      star.x - 9 < self.x + 45 &&
-      y + 9 > self.y &&
-      y - 9 < self.y + 57
-    ) {
-      collecting.add(star.id);
-      client
-        .timeout(5000)
-        .emit(
-          "score",
-          { starId: star.id, roundId: currentRound?.id, sequence: sequence++ },
-          (timeout: Error | null, error?: string) => {
-            if (!timeout && !error) tone(880, 0.08);
-            else if (timeout) collecting.delete(star.id);
-          },
-        );
-    }
-  }
+  const now = Date.now(),
+    dt = lastFrame ? Math.min(0.1, (now - lastFrame) / 1000) : 0;
+  lastFrame = now;
+  renderArena(dt, now);
   animation = requestAnimationFrame(draw);
+}
+function renderArena(dt = 0, now = Date.now()) {
+  const runners = [self, ...others.values()].filter(
+    (runner): runner is Runner => Boolean(runner),
+  );
+  runners.forEach((runner) => runner.update(dt));
+  renderer ??= new ArenaRenderer(canvas, element("renderer-notice"));
+  canvas = renderer.canvas;
+  renderer.render(
+    runners.map((runner) => ({
+      ...runner,
+      moving: runner.state.runningLeft || runner.state.runningRight,
+      local: runner.local,
+      facing: runner.state.idLeft ? -1 : 1,
+    })),
+    stars,
+    now,
+  );
 }
 client.on("identity", (id) => {
   playerId = id;
@@ -357,8 +301,8 @@ client.on("roomData", (payload) => {
     stop();
     currentRound = undefined;
     stars = [];
+    renderer?.render([], []);
     remaining = 90;
-    bonusRequests.clear();
     menu.style.display = "block";
     end.style.display = "none";
     status.textContent =
@@ -407,7 +351,19 @@ client.on("roomData", (payload) => {
       self.score = player.score;
       self.kind = player.kind;
       self.bonus = player.bonus;
-      self.usedStages = player.usedStages;
+      self.local = true;
+      self.targetX = player.x;
+      self.sampledAt = Date.now();
+      self.slowedUntil = player.slowedUntil;
+      if (player.feedback?.id !== self.feedback?.id && player.feedback) {
+        element("bonus-feedback").textContent = player.feedback.text;
+        element("bonus-feedback").setAttribute(
+          "data-good",
+          String(player.feedback.good),
+        );
+        tone(player.feedback.good ? 880 : 180, 0.1);
+      }
+      self.feedback = player.feedback;
     } else if (!others.has(player.id))
       others.set(
         player.id,
@@ -424,6 +380,9 @@ client.on("roomData", (payload) => {
     if (other) {
       other.score = player.score;
       other.bonus = player.bonus;
+      other.targetX = player.x;
+      other.slowedUntil = player.slowedUntil;
+      other.feedback = player.feedback;
     }
   }
   updateHud();
@@ -442,6 +401,8 @@ client.on("init", (payload) => {
   remaining = Math.max(0, Math.ceil((currentRound.endsAt - Date.now()) / 1000));
   stars = parsed.data.stars;
   running = true;
+  lastFrame = 0;
+  self.x = self.targetX;
   menu.style.display = "none";
   end.style.display = "none";
   updateHud();
@@ -473,10 +434,16 @@ client.on("roundEnded", (payload) => {
         ),
       );
     const runner = player.userId === playerId ? self : others.get(player.id);
-    if (runner) runner.score = player.score;
+    if (runner) {
+      runner.score = player.score;
+      runner.x = player.x;
+      runner.targetX = player.x;
+    }
   }
   remaining = 0;
+  stars = [];
   updateHud();
+  renderArena();
   finish();
 });
 client.on("score", (payload) => {
@@ -496,6 +463,12 @@ client.on("deplacementMonJoueur", (payload) => {
 });
 function move(direction: "left" | "right", pressed: boolean) {
   if (!self || !running) return;
+  if (
+    (direction === "left"
+      ? self.state.runningLeft
+      : self.state.runningRight) === pressed
+  )
+    return;
   if (direction === "left") {
     self.state.runningLeft = pressed;
     self.state.idLeft = true;
@@ -505,6 +478,7 @@ function move(direction: "left" | "right", pressed: boolean) {
     self.state.idRight = true;
     self.state.idLeft = false;
   }
+  if (pressed) self.sampledAt = Date.now();
   client.emit("deplacementMonJoueur", {
     etat: self.state,
     roundId: currentRound?.id,
@@ -546,6 +520,9 @@ for (const [id, direction] of [
 window.addEventListener("blur", () => {
   move("left", false);
   move("right", false);
+});
+window.addEventListener("resize", () => {
+  if (!running && currentRound && renderer) renderArena();
 });
 start.addEventListener("click", () => client.emit("startGame"));
 function leaveGame() {
@@ -597,30 +574,5 @@ window.addEventListener("load", () => {
 window.addEventListener("pagehide", () => {
   stop();
   client.disconnect();
+  renderer?.dispose();
 });
-
-for (const kind of ["sprint", "multiplier"] as const)
-  element(`bonus-${kind}`).addEventListener("click", () => {
-    if (!currentRound || !running || bonusPending) return;
-    const stage = stageAt(currentRound);
-    let request = bonusRequests.get(stage);
-    if (!request || request.kind !== kind) {
-      request = { id: crypto.randomUUID(), kind };
-      bonusRequests.set(stage, request);
-    }
-    bonusPending = true;
-    updateHud();
-    client
-      .timeout(5000)
-      .emit(
-        "activateBonus",
-        { ...request, roundId: currentRound.id, stage },
-        (timeout: Error | null, error?: string) => {
-          bonusPending = false;
-          updateHud();
-          element("bonus-feedback").textContent = timeout
-            ? "Bonus non confirmé. Réessayez avec la connexion rétablie."
-            : error || "Bonus activé.";
-        },
-      );
-  });

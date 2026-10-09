@@ -247,11 +247,11 @@ test("invités : une place, reprise, salon plein, événements uniques et absenc
   };
   assert.equal(
     await twin.client.emitWithAck("activateBonus", bonus),
-    undefined,
+    "Les bonus s’activent automatiquement en les ramassant.",
   );
   assert.equal(
     await twin.client.emitWithAck("activateBonus", bonus),
-    undefined,
+    "Les bonus s’activent automatiquement en les ramassant.",
   );
   const resume = await socket(b.cookie);
   await resume.client.emitWithAck("join", { room });

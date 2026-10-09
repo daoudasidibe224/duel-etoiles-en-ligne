@@ -20,6 +20,19 @@ const bundle = build({
   format: "iife",
   plugins: [
     {
+      name: "renderer-fixture",
+      setup(plugin) {
+        plugin.onResolve({ filter: /arenaRenderer$/ }, () => ({
+          path: "renderer",
+          namespace: "renderer-fixture",
+        }));
+        plugin.onLoad({ filter: /.*/, namespace: "renderer-fixture" }, () => ({
+          contents:
+            "export class ArenaRenderer { constructor(canvas) { this.canvas = canvas; } render() {} dispose() {} }",
+        }));
+      },
+    },
+    {
       name: "socket-fixture",
       setup(plugin) {
         plugin.onResolve({ filter: /^socket.io-client$/ }, () => ({
@@ -130,7 +143,7 @@ test("la page initiale annonce l’attente et ne présente pas de faux score adv
   assert.match(html, /id="other-name">Place libre</);
   assert.match(html, /id="other-score"[^>]*>—</);
   assert.match(html, /id="gameCanvas"[^>]*hidden/);
-  assert.match(html, /src="\/images\/arena-preview.svg"/);
+  assert.match(html, /src="\/images\/arena-preview.png"/);
 });
 
 test("l’aperçu suit attente, arrivée, départ, reprise, fin et restauration", async () => {
@@ -180,6 +193,7 @@ test("l’aperçu suit attente, arrivée, départ, reprise, fin et restauration"
   assert.equal(get("timer-label").textContent, "Temps restant");
   assert.equal(get("self-score").textContent, "3");
   assert.equal(get("other-score").textContent, "2");
+  assert.equal(get("bonus-status").textContent, "Manche terminée.");
   event("roomData", { ...room, recoveryNotice: "Manche interrompue." });
   assert.equal(get("arena-waiting").hidden, false);
   assert.equal(get("gameCanvas").hidden, true);

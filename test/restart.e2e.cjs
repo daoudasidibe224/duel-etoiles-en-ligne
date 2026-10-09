@@ -151,16 +151,9 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
       assert.equal(get().round.stage, stage);
       const roundId = get().round.id;
       const bonus = { id: randomUUID(), roundId, stage, kind: "multiplier" };
-      assert.equal(await c.emitWithAck("activateBonus", bonus), undefined);
-      const expiration = get().utilisateurs.find(
-        (p) => p.userId === identity.identity.split(":")[1],
-      ).bonus.expiresAt;
-      assert.equal(await c.emitWithAck("activateBonus", bonus), undefined);
-      const consumed = get().utilisateurs.find(
-        (p) => p.userId === identity.identity.split(":")[1],
-      );
-      assert.deepEqual(consumed.usedStages, [stage]);
-      assert.equal(consumed.bonus.expiresAt, expiration);
+      assert.match(await c.emitWithAck("activateBonus", bonus), /automatiquement/);
+      assert.match(await c.emitWithAck("activateBonus", bonus), /automatiquement/);
+      assert.deepEqual(get().utilisateurs.find(p => p.userId === identity.identity.split(":")[1]).usedStages, []);
       const d = await socket(a),
         replaced = once(c, "replaced");
       await d.emitWithAck("join", { room });
@@ -383,9 +376,9 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
       stage: oldState().round.stage,
       kind: "sprint",
     };
-    assert.equal(
+    assert.match(
       await oldSocket.emitWithAck("activateBonus", oldBonus),
-      undefined,
+      /automatiquement/,
     );
     console.log("OVERLAP pre logout", new Date().toISOString(), oldState().round.endsAt - Date.now());
     await logoutPage.goto(base + "/salon");

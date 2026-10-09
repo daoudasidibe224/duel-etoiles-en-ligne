@@ -25,7 +25,11 @@ export default function game(
   namespace: GameNamespace,
   lobby: GameNamespace,
   rooms: Rooms,
-  options: { durationMs?: number; reconnectMs?: number } = {},
+  options: {
+    durationMs?: number;
+    reconnectMs?: number;
+    random?: () => number;
+  } = {},
   roomSessions = new Map<string, string>(),
   journal?: import("../services/roomJournal").RoomJournal,
 ) {
@@ -290,6 +294,7 @@ export default function game(
             previous.expiresAt = user.expiresAt ?? Date.now() + 86400000;
             previous.movementSequence = -1;
             previous.scoreSequence = -1;
+            arenas.get(previous.player.room)?.halt(user.id);
             old?.emit("replaced");
             old?.disconnect();
           }
@@ -317,6 +322,7 @@ export default function game(
           nomUtilisateur: user.nomUtilisateur,
           room: room.id,
           score: 0,
+          x: room.utilisateurs.length === 0 ? 430 : 530,
           usedStages: [],
           kind: user.kind,
         };
@@ -380,6 +386,12 @@ export default function game(
         delete room.interruptedRoundId;
         room.started = true;
         room.startedAt = Date.now();
+        room.utilisateurs.forEach((player, index) => {
+          player.x = index === 0 ? 430 : 530;
+          delete player.bonus;
+          delete player.slowedUntil;
+          delete player.feedback;
+        });
         room.round = {
           id: randomUUID(),
           startedAt: room.startedAt,
@@ -392,8 +404,12 @@ export default function game(
         await publish(room);
         arenas.set(
           room.id,
-          new Arena(room.round, room.utilisateurs, () =>
-            namespace.to(room.id).emit("roomData", snapshot(room)),
+          new Arena(
+            room.round,
+            room.utilisateurs,
+            () => namespace.to(room.id).emit("roomData", snapshot(room)),
+            Date.now,
+            options.random,
           ),
         );
         const timer = setTimeout(() => {
@@ -428,6 +444,7 @@ export default function game(
           idRight: input.idRight === true,
           dead: input.dead === true,
         };
+        arenas.get(member.player.room)?.move(user.id, etat);
         socket
           .to(member.player.room)
           .emit("deplacementMonJoueur", { id: user.id, etat });
@@ -532,6 +549,7 @@ export default function game(
         if (stopping || reason === "server shutting down") return;
         const member = active();
         if (!member) return;
+        arenas.get(member.player.room)?.halt(user.id);
         if (
           reason === "server namespace disconnect" ||
           reason === "forced server close"

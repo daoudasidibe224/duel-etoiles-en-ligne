@@ -17,7 +17,7 @@ const assert = require("node:assert/strict");
   const mongo = await MongoMemoryServer.create();
   await mongoose.connect(mongo.getUri());
   const store = MongoStore.create({ client: mongoose.connection.getClient() });
-  const { app, server, io } = createApp({ secret: "q".repeat(48), store });
+  const { app, server, io } = createApp({ secret: "q".repeat(48), store, gameOptions: { random: () => 0 } });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const base = "http://127.0.0.1:" + server.address().port;
   const browser = await chromium.launch({ headless: true });
@@ -172,9 +172,11 @@ const assert = require("node:assert/strict");
   await one.getByText("La partie a commencé.", { exact: true }).waitFor();
   await two.getByText("La partie a commencé.", { exact: true }).waitFor();
   assert.equal(await two.locator("#self-name").textContent(), "qa_two");
-  await one.getByRole("button", { name: "Points ×2" }).click();
-  await one.getByText("Bonus activé.", { exact: true }).waitFor();
-  assert.equal(await one.locator("#bonus-multiplier").isDisabled(), true);
+  const live = app.salons[matchUrl.split("/").pop()];
+  live.round.stars.push({ id: require("node:crypto").randomUUID(), kind: "multiplier", x: live.utilisateurs[0].x + 22.5, bornAt: Date.now() - 450 / 140 * 1000, speed: 140 });
+  await one.getByText("Points ×2 activé", { exact: true }).waitFor();
+  assert.equal(await one.locator("#bonus-multiplier").count(), 0);
+  await one.waitForFunction(() => document.querySelector("#gameCanvas")?.dataset.renderer === "webgl-3d");
   await one.waitForFunction(
     () => Number(document.querySelector("#self-score")?.textContent) >= 2,
     null,
@@ -206,19 +208,13 @@ const assert = require("node:assert/strict");
     false,
   );
   await one
-    .getByText("Étape 2 / 3 · Cadence", { exact: true })
+    .getByText("Étape 2 / 3 · Pluie cosmique", { exact: true })
     .waitFor({ timeout: 35000 });
-  await one
-    .getByRole("button", { name: "Accélération · 8 s", exact: true })
-    .click();
-  await one.getByText("Bonus activé.", { exact: true }).waitFor();
-  await one
-    .getByText("Étape 3 / 3 · Dernière ligne droite", { exact: true })
-    .waitFor({ timeout: 35000 });
-  await one
-    .getByRole("button", { name: "Points ×2 · 8 s", exact: true })
-    .click();
-  await one.getByText("Bonus activé.", { exact: true }).waitFor();
+  live.round.stars.push({ id: require("node:crypto").randomUUID(), kind: "sprint", x: live.utilisateurs[0].x + 22.5, bornAt: Date.now() - 450 / 140 * 1000, speed: 140 });
+  await one.getByText("Vitesse +50 % activée", { exact: true }).waitFor();
+  await one.getByText("Étape 3 / 3 · Dernière rafale", { exact: true }).waitFor({ timeout: 37000 });
+  live.round.stars.push({ id: require("node:crypto").randomUUID(), kind: "shield", x: live.utilisateurs[0].x + 22.5, bornAt: Date.now() - 450 / 140 * 1000, speed: 140 });
+  await one.getByText("Bouclier activé", { exact: true }).waitFor();
   await one
     .getByText("Score enregistré. Retrouvez cette partie dans vos scores.", {
       exact: true,
@@ -286,7 +282,7 @@ const assert = require("node:assert/strict");
           "offline refresh and round resume",
           "start",
           "server shared stars confirmed score",
-          "three stages and bonus per stage",
+          "three stages, 3D renderer and automatic pickup bonus",
           "touch",
           "results",
           "stats",

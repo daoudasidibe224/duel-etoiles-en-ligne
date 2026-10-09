@@ -594,37 +594,39 @@ test("progression, étoiles communes et bonus ne se rejouent pas après reprise"
     assert.match(
       await guest.emitWithAck("activateBonus", {
         id: randomUUID(),
-        roundId: randomUUID(),
+        roundId: round.id,
         kind: "sprint",
         stage: 0,
       }),
-      /active/,
+      /automatiquement/,
     );
-    await new Promise((resolve) => setTimeout(resolve, 3020));
+    await new Promise((resolve) => setTimeout(resolve, 3100));
     assert.equal(fresh.app.salons[room].round?.stage, 1);
-    const bonus = {
+    const live = fresh.app.salons[room],
+      player = live.utilisateurs[0];
+    assert.equal(player.score, 1, "première étoile ramassée automatiquement");
+    const now = Date.now();
+    live.round!.stars.push({
       id: randomUUID(),
-      roundId: round.id,
       kind: "multiplier",
-      stage: 1,
-    };
-    assert.equal(await owner.emitWithAck("activateBonus", bonus), undefined);
-    const expiry = fresh.app.salons[room].utilisateurs[0]?.bonus?.expiresAt;
+      x: player.x + 22.5,
+      bornAt: now - (450 / 140) * 1000,
+      speed: 140,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const expiry = player.bonus?.expiresAt;
     assert.ok(expiry);
-    assert.equal(await owner.emitWithAck("activateBonus", bonus), undefined);
-    assert.equal(
-      fresh.app.salons[room].utilisateurs[0]?.bonus?.expiresAt,
-      expiry,
-    );
-    assert.match(
-      await owner.emitWithAck("activateBonus", { ...bonus, kind: "sprint" }),
-      /autrement/,
-    );
-    assert.match(
-      await owner.emitWithAck("activateBonus", { ...bonus, id: randomUUID() }),
-      /déjà/,
-    );
-    const claim = { roundId: round.id, sequence: 2, starId: star.id };
+    assert.equal(player.bonus?.kind, "multiplier");
+    const objectId = randomUUID();
+    live.round!.stars.push({
+      id: objectId,
+      kind: "star",
+      x: player.x + 22.5,
+      bornAt: Date.now() - (450 / 140) * 1000,
+      speed: 140,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const claim = { roundId: round.id, sequence: 2, starId: objectId };
     assert.equal(await owner.emitWithAck("score", claim), undefined);
     assert.equal(
       await owner.emitWithAck("score", { ...claim, sequence: 3 }),
@@ -632,17 +634,25 @@ test("progression, étoiles communes et bonus ne se rejouent pas après reprise"
     );
     assert.match(
       await guest.emitWithAck("score", { ...claim, sequence: 1 }),
-      /ramassée/,
+      /ramassé/,
     );
-    assert.equal(fresh.app.salons[room].utilisateurs[0]?.score, 2);
+    assert.equal(player.score, 3);
     const takeover = await joinClient(accountA.cookie);
     const oldDisconnected = socketEvent(owner, "disconnect", z.string());
     await takeover.emitWithAck("join", { room });
     await oldDisconnected;
     assert.equal(owner.connected, false);
-    assert.deepEqual(fresh.app.salons[room].utilisateurs[0]?.usedStages, [1]);
+    assert.deepEqual(fresh.app.salons[room].utilisateurs[0]?.usedStages, []);
     assert.equal(fresh.app.salons[room].utilisateurs.length, 2);
-    assert.equal(await takeover.emitWithAck("activateBonus", bonus), undefined);
+    assert.match(
+      await takeover.emitWithAck("activateBonus", {
+        id: randomUUID(),
+        roundId: round.id,
+        stage: 1,
+        kind: "multiplier",
+      }),
+      /automatiquement/,
+    );
     assert.equal(
       fresh.app.salons[room].utilisateurs[0]?.bonus?.expiresAt,
       expiry,
@@ -666,7 +676,7 @@ test("progression, étoiles communes et bonus ne se rejouent pas après reprise"
           monJoueurId: fresh.app.salons[room].proprietaireId,
         })
       )?.monScore,
-      2,
+      3,
     );
   } finally {
     clients.forEach((client) => client.disconnect());
