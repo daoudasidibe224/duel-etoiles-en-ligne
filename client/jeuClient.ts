@@ -158,10 +158,32 @@ function updateHud() {
         Boolean(self?.usedStages.includes(phase));
   }
   const opponent = others.values().next().value;
+  const waiting = !currentRound;
+  element("arena-waiting").hidden = !waiting;
+  canvas.hidden = waiting;
+  element("waiting-title").textContent =
+    users < 2 ? "En attente du second joueur" : "Tout le monde est prêt";
+  element("waiting-description").textContent =
+    users < 2
+      ? "Copiez l’invitation pour partager cette arène."
+      : "Le propriétaire du salon peut lancer la manche.";
+  element("timer-label").textContent = waiting ? "Durée prévue" : "Temps restant";
+  element("game-hud").setAttribute(
+    "aria-label",
+    waiting ? "Joueurs et durée prévue" : "Scores et temps restant",
+  );
+  if (waiting) element("countdown").removeAttribute("role");
+  else element("countdown").setAttribute("role", "timer");
   element("self-name").textContent = self?.name || "Vous";
   element("self-score").textContent = String(self?.score || 0);
-  element("other-name").textContent = opponent?.name || "Second joueur";
-  element("other-score").textContent = String(opponent?.score || 0);
+  element("other-name").textContent = opponent?.name || "Place libre";
+  const opponentScore = element("other-score");
+  opponentScore.textContent = opponent ? String(opponent.score) : "—";
+  opponentScore.setAttribute(
+    "aria-label",
+    opponent ? `Score de ${opponent.name}` : "En attente du second joueur",
+  );
+  opponentScore.parentElement?.classList.toggle("is-empty", !opponent);
   element("countdown").textContent =
     `${Math.floor(remaining / 60)}:${(remaining % 60).toString().padStart(2, "0")}`;
 }

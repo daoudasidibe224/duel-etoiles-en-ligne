@@ -57,6 +57,36 @@
   border-radius: 7px;
   image-rendering: pixelated;
 }
+.arena-waiting {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #10191e;
+}
+.arena-waiting img {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+}
+.arena-waiting-caption {
+  padding: 14px 18px;
+  border-top: 1px solid var(--line);
+  background: var(--paper);
+}
+.arena-waiting-caption strong {
+  display: block;
+  color: var(--yellow);
+  font-size: 15px;
+}
+.arena-waiting-caption p {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
+.hud-player.is-empty output {
+  color: var(--muted);
+}
 .game-hud {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -258,6 +288,15 @@
   }
   .stage-hud progress {
     width: 20%;
+  }
+  .arena-waiting-caption {
+    padding: 11px 13px;
+  }
+  .arena-waiting-caption strong {
+    font-size: 13px;
+  }
+  .arena-waiting-caption p {
+    font-size: 11px;
   }
   .touch-controls {
     margin: 10px auto;
