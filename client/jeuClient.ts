@@ -106,6 +106,7 @@ let self: Runner | undefined,
   users = 0,
   playerId = "",
   currentRound: Round | undefined,
+  finalPlayers: Player[] | undefined,
   sequence = 0,
   animation: number | undefined,
   replaced = false;
@@ -294,12 +295,18 @@ client.on("disconnect", () => {
 client.on("roomData", (payload) => {
   const parsed = gameRoomSchema.safeParse(payload);
   if (!parsed.success) return;
-  const players = parsed.data.utilisateurs;
+  const players =
+    parsed.data.round?.ended &&
+    currentRound?.id === parsed.data.round.id &&
+    finalPlayers
+      ? finalPlayers
+      : parsed.data.utilisateurs;
   element("room-recovery").textContent = parsed.data.recoveryNotice ?? "";
   element("room-recovery").hidden = !parsed.data.recoveryNotice;
   if (!parsed.data.round && parsed.data.recoveryNotice) {
     stop();
     currentRound = undefined;
+    finalPlayers = undefined;
     stars = [];
     renderer?.render([], []);
     remaining = 90;
@@ -398,6 +405,7 @@ client.on("init", (payload) => {
     return;
   stop();
   currentRound = parsed.data;
+  finalPlayers = undefined;
   remaining = Math.max(0, Math.ceil((currentRound.endsAt - Date.now()) / 1000));
   stars = parsed.data.stars;
   running = true;
@@ -422,6 +430,7 @@ client.on("roundEnded", (payload) => {
   const parsed = gameRoomSchema.safeParse(payload);
   if (!parsed.success || !parsed.data.round?.ended) return;
   currentRound = parsed.data.round;
+  finalPlayers = parsed.data.utilisateurs;
   for (const player of parsed.data.utilisateurs) {
     if (player.userId !== playerId && !others.has(player.id))
       others.set(

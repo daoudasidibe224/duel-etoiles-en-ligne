@@ -194,6 +194,17 @@ test("l’aperçu suit attente, arrivée, départ, reprise, fin et restauration"
   assert.equal(get("self-score").textContent, "3");
   assert.equal(get("other-score").textContent, "2");
   assert.equal(get("bonus-status").textContent, "Manche terminée.");
+  event("roomData", {
+    ...room,
+    round: { ...round, ended: true, saved: true },
+    utilisateurs: [{ ...alice, score: 3 }],
+  });
+  assert.equal(
+    get("other-name").textContent,
+    "Bob",
+    "le départ de l’adversaire garde le résultat affiché",
+  );
+  assert.equal(get("other-score").textContent, "2");
   event("roomData", { ...room, recoveryNotice: "Manche interrompue." });
   assert.equal(get("arena-waiting").hidden, false);
   assert.equal(get("gameCanvas").hidden, true);
