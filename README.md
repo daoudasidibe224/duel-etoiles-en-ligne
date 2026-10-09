@@ -127,7 +127,7 @@ La base doit offrir un stockage durable indépendant du disque du conteneur. Une
 
 ## Préparation Render gratuit
 
-`render.yaml` décrit un service Docker gratuit, en région Francfort, sur la branche `improve/public-2026-10`. La sonde de promotion est `/health/deploy` et les déploiements automatiques sont désactivés. Au moment de créer le Blueprint, renseignez `SECRET` et `MONGODB_URI` dans Render : les valeurs `sync: false` ne contiennent aucun secret dans Git. Aucun service, abonnement ni compte cloud n’est créé par ce fichier.
+`render.yaml` décrit un service Docker gratuit, en région Francfort, sur la branche `develop`. La sonde de promotion est `/health/deploy` et les déploiements automatiques sont désactivés. Au moment de créer le Blueprint, renseignez `SECRET` et `MONGODB_URI` dans Render : les valeurs `sync: false` ne contiennent aucun secret dans Git. Aucun service, abonnement ni compte cloud n’est créé par ce fichier.
 
 Utilisez une base MongoDB Atlas Free (anciennement M0), séparée du stockage Render. Ce cluster fournit un replica set et un stockage limité à 512 Mo ; il convient à une démonstration avec des données modestes. Choisissez une base propre à l’application, un utilisateur limité à cette base et autorisez les adresses de sortie de votre service dans l’accès réseau Atlas. L’URI doit indiquer la base et conserver TLS. Les sessions, comptes, messages et scores restent ainsi dans MongoDB. [Configuration des clusters Atlas](https://www.mongodb.com/docs/atlas/manage-clusters/).
 

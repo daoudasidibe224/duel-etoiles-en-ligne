@@ -3,7 +3,7 @@ services:
     name: duel-etoiles-en-ligne
     runtime: docker
     repo: https://github.com/daoudasidibe224/duel-etoiles-en-ligne
-    branch: improve/public-2026-10
+    branch: develop
     plan: free
     region: frankfurt
     numInstances: 1
