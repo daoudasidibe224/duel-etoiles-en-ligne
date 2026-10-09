@@ -48,6 +48,7 @@ const bundle = build({
 });
 
 class NodeFixture {
+  dataset: Record<string, string> = {};
   textContent = "";
   hidden = false;
   disabled = false;

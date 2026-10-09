@@ -446,6 +446,19 @@ test("une partie mixte enregistre uniquement le score du compte, sans doubler le
   assert.equal(scores.length, 1);
   assert.equal(scores[0]?.monJoueurId.toString(), a.id);
   assert.equal(scores[0]?.nomUtilisateurAutreJoueur, "mixed_guest");
+  const firstResult = scores[0].toObject();
+  const restarted = event(a.client, "init", roundSchema);
+  a.client.emit("startGame");
+  const nextRound = await restarted;
+  assert.notEqual(nextRound.id, round.id);
+  assert.deepEqual(main.app.salons[room].utilisateurs.map(p => p.score), [0, 0]);
+  const nextEnd = event(a.client, "roundEnded", gameRoomSchema);
+  assert.match(await a.client.emitWithAck("scoreFinDeJeu", { roundId: round.id }), /invalide/);
+  await nextEnd;
+  for (let n = 0; n < 4; n++)
+    assert.equal(await a.client.emitWithAck("scoreFinDeJeu", { roundId: nextRound.id }), undefined);
+  assert.equal(await Score.countDocuments({ matchId: nextRound.id }), 1);
+  assert.deepEqual((await Score.findOne({ matchId: round.id }))!.toObject(), firstResult);
   await a.client.emitWithAck("leave");
   a.client.disconnect();
   b.client.disconnect();
@@ -498,4 +511,109 @@ test("discussion invitée : message persistant unique, présence unique et sessi
   assert.equal(one.connected, false);
   assert.equal(two.connected, false);
   assert.match(await denied(user.cookie, instance), /nécessaire/);
+});
+
+test("deux invités rejouent dans le même salon avec des états neufs et sans actions anciennes", async () => {
+  const fresh = await start({
+    gameOptions: { durationMs: 1000, reconnectMs: 300 },
+  });
+  const a = await guest("replay_owner", fresh),
+    b = await guest("replay_partner", fresh);
+  const roomId = await open(a.agent);
+  const owner = await socket(a.cookie, fresh),
+    partner = await socket(b.cookie, fresh);
+  await owner.client.emitWithAck("join", { room: roomId });
+  await partner.client.emitWithAck("join", { room: roomId });
+  let starts = 0;
+  owner.client.on("init", () => starts++);
+  const firstInit = event(owner.client, "init", roundSchema);
+  owner.client.emit("startGame");
+  const first = await firstInit;
+  const firstEnd = event(owner.client, "roundEnded", gameRoomSchema);
+  const room = fresh.app.salons[roomId],
+    player = room.utilisateurs[0];
+  player.score = 7;
+  player.x = 650;
+  player.bonus = { kind: "sprint", stage: 0, expiresAt: Date.now() + 1000 };
+  player.slowedUntil = Date.now() + 1000;
+  player.usedStages = [0];
+  owner.client.emit("deplacementMonJoueur", {
+    roundId: first.id,
+    sequence: 9,
+    etat: { runningLeft: true },
+  });
+  owner.client.emit("startGame");
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(room.round!.id, first.id);
+  assert.equal(starts, 1);
+  const ended = await firstEnd;
+  assert.equal(ended.round!.saved, true);
+  assert.equal(await Score.countDocuments({ matchId: first.id }), 0);
+  partner.client.emit("startGame");
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(room.round!.id, first.id, "le second joueur ne peut relancer");
+  room.round!.saved = false;
+  owner.client.emit("startGame");
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(
+    room.round!.id,
+    first.id,
+    "un résultat non confirmé bloque la relance",
+  );
+  const reconfirmed = event(owner.client, "roundEnded", gameRoomSchema);
+  assert.equal(await owner.client.emitWithAck("scoreFinDeJeu", { roundId: first.id }), undefined);
+  assert.equal((await reconfirmed).round!.saved, true);
+  const secondInit = event(owner.client, "init", roundSchema);
+  for (let n = 0; n < 3; n++) owner.client.emit("startGame");
+  const second = await secondInit;
+  const secondEnd = event(owner.client, "roundEnded", gameRoomSchema);
+  assert.notEqual(second.id, first.id);
+  assert.equal(room.utilisateurs.length, 2);
+  assert.equal(new Set(room.utilisateurs.map((value) => value.userId)).size, 2);
+  assert.deepEqual(
+    room.utilisateurs.map((value) => value.x),
+    [430, 530],
+  );
+  for (const value of room.utilisateurs) {
+    assert.equal(value.score, 0);
+    assert.equal(value.bonus, undefined);
+    assert.equal(value.slowedUntil, undefined);
+    assert.equal(value.feedback, undefined);
+    assert.deepEqual(value.usedStages, []);
+  }
+  assert.equal(starts, 2);
+  owner.client.emit("deplacementMonJoueur", {
+    roundId: first.id,
+    sequence: 100,
+    etat: { runningRight: true },
+  });
+  assert.match(
+    await owner.client.emitWithAck("score", {
+      roundId: first.id,
+      sequence: 100,
+      starId: first.stars[0].id,
+    }),
+    /ancien/,
+  );
+  owner.client.emit("deplacementMonJoueur", {
+    roundId: second.id,
+    sequence: 0,
+    etat: { runningLeft: true },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  assert.equal(
+    player.movementSequence,
+    0,
+    "la séquence repart à zéro dans la nouvelle manche",
+  );
+  assert.ok(player.x < 430);
+  assert.equal(player.score, 0);
+  assert.equal(
+    starts,
+    2,
+    "les demandes répétées pendant la manche ne recréent pas d’arène",
+  );
+  await secondEnd;
+  owner.client.disconnect();
+  partner.client.disconnect();
 });

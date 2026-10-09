@@ -1,117 +1,116 @@
 include includes/head.pug
 link(rel='stylesheet' href='/styles/jeu.css')
-body
-  include includes/header.pug
-  main#contenu.game-page.page-shell
-    header.game-session-header
-      div
-        p.eyebrow Duel d’étoiles · Salon de #{nomDuSalon}
-        h1 Course cosmique
-        p.arena-subtitle Ramassez les étoiles. Évitez les dangers. Prenez l’avance.
-      .game-toolbar
-        button#share-room.button.is-outlined(type='button') Copier l’invitation
-        button#sound-toggle.button.is-outlined(type='button' aria-pressed='false') Activer le son
-        button#leave-game.button.is-outlined(type='button') Quitter la partie
-    p#room-recovery.notification(role='status' hidden)
+body.game-body
+  a.skip-link(href='#contenu') Aller au jeu
+  main#contenu.game-page
+    .game-topline
+      a.game-brand(href='/salon') ✦ Duel d’étoiles
+      span Salon de #{nomDuSalon}
+    p#room-recovery.recovery-notice(role='status' hidden)
     #chargement(role='status') Connexion à la partie…
     #airDeJeu
-      .arena-layout
-        section.arena-main(aria-label='Arène et scores')
-          #game-hud.game-hud(role='group' aria-label='Joueurs et durée prévue')
-            .hud-player#self-player(data-tone="amber")
-              span.player-avatar(aria-hidden="true")
+      section.arena-shell(aria-label='Partie de Duel d’étoiles')
+        header.arena-toolbar
+          h1 Course cosmique
+          .game-toolbar
+            button#share-room.button.is-outlined(type='button' aria-label='Copier l’invitation') Inviter
+            button#sound-toggle.button.is-outlined(type='button' aria-pressed='false') Activer le son
+            button#leave-game.button.is-outlined(type='button') Quitter la partie
+        #game-hud.game-hud(role='group' aria-label='Joueurs et durée prévue')
+          .hud-player#self-player(data-tone='amber')
+            span.player-avatar(aria-hidden='true')
+            .player-name
+              small Vous
               span#self-name Vous
-              output#self-score(aria-label='Votre score') 0
-            .hud-timer
-              span#timer-label Durée prévue
-              span#countdown 1:30
-            .hud-player#other-player(data-tone="mint")
-              span.player-avatar(aria-hidden="true")
+            output#self-score(aria-label='Votre score') 0
+          .hud-timer
+            span#timer-label Durée prévue
+            span#countdown 1:30
+          .hud-player#other-player(data-tone='mint')
+            span.player-avatar(aria-hidden='true')
+            .player-name
+              small Adversaire
               span#other-name Place libre
-              output#other-score(aria-label='En attente du second joueur') —
+            output#other-score(aria-label='En attente du second joueur') —
+        .arena-strip
           .stage-hud
             p#stage-name Étape 1 / 3 · Échauffement
             progress#stage-progress(value='0' max='90' aria-label='Progression de la manche')
-          .effect-panel.arena-effect-line
-            h2 Votre effet
-            p#bonus-status Attrapez un bonus : il s’active tout seul.
-            p#bonus-feedback(role='status' aria-live='polite')
+          p#bonus-status Attrapez un bonus : il s’active tout seul.
+          p#bonus-feedback(role='status' aria-live='polite')
+        .arena-viewport
           #arena-waiting.arena-waiting
             img(src='/images/arena-preview.jpg' alt='' width='960' height='540')
-            .arena-waiting-caption
-              strong#waiting-title En attente du second joueur
-              p#waiting-description Copiez l’invitation pour partager cette arène.
-          canvas#gameCanvas(width='960' height='540' hidden aria-label='Arène 2D. Déplacez votre pilote avec les flèches gauche et droite.')
-          p#renderer-notice.recovery-notice(hidden role="status")
-          .touch-controls(aria-label='Commandes du joueur')
-            button#move-left.button(type='button' aria-label='Se déplacer à gauche') ←
-            span Flèches du clavier ou appui maintenu
-            button#move-right.button(type='button' aria-label='Se déplacer à droite') →
-        aside.arena-sidebar(aria-label='Départ et bonus')
-          #menuDepart.menu
-            p.eyebrow Avant le départ
-            h2 Prêts à décoller ?
-            p Ramassez les étoiles, esquivez les dangers. Le meilleur score gagne.
+          canvas#gameCanvas(width='960' height='540' hidden aria-label='Arène 2D. Déplacez votre pilote avec les flèches gauche et droite.' tabindex='0')
+          #menuDepart.game-panel
+            p.panel-kicker À deux, c’est mieux
+            h2#waiting-title En attente du second joueur
+            p#waiting-description Copiez l’invitation pour partager cette arène.
             p.nbJoueur
-            button#btnDepart.button.cacher Jouer
-          section.bonus-controls(aria-label='Objets et effet actif')
-            .collect-panel
-              h2 À ramasser
-              .points-guide
-                .points-chip
-                  span.star-symbol(aria-hidden='true') ★
-                  span Étoile
-                  strong +1
-                .points-chip.is-gold
-                  span.star-symbol(aria-hidden='true') ★
-                  span Dorée
-                  strong +3
-              h3 Les bonus · 8 secondes
-              ul.item-legend.bonus-legend
-                li.sprint
-                  span.legend-dot.sprint »
-                  strong Vitesse
-                  span +50 % de vitesse
-                li.multiplier
-                  span.legend-dot.multiplier ×2
-                  strong Points ×2
-                  span Double vos gains
-                li.shield
-                  span.legend-dot.shield ◈
-                  strong Bouclier
-                  span Bloque un impact
-                li.magnet
-                  span.legend-dot.magnet U
-                  strong Aimant
-                  span Attire les étoiles
-            .danger-panel
-              h2 À éviter
-              ul.item-legend.danger-legend
-                li
-                  span.legend-dot.meteor −3
-                  strong Météorite
-                  span −3 points
-                li
-                  span.legend-dot.barrier −2
-                  strong Bloc au sol
-                  span −2 points
-                li
-                  span.legend-dot.slime ½
-                  strong Flaque
-                  span Ralentit · 4 s
-          details.game-rules
-            summary Règles et bonus
-            p Une manche dure 90 secondes. Ramassez une étoile pour gagner 1 point, une dorée pour en gagner 3. Le rythme accélère à chaque étape.
-            p Les bonus s’activent au contact. Un nouveau bonus remplace le précédent. Le bouclier disparaît après un impact ; la flaque ralentit pendant 4 secondes.
-            p Évitez les météorites (−3) et les blocs (−2). Un bloc reste au sol 3 secondes. Le score ne descend jamais sous zéro. Les objets sont partagés : le pilote le plus proche les ramasse.
-            p Une coupure permet une reprise pendant 12 secondes ; quitter met fin à la manche.
-          p#game-status(role='status')
-          button#retry-score.button.is-outlined.cacher(type='button') Réessayer l’enregistrement
-          #finPartie.menu
+            button#btnDepart.button.cacher(type='button') Jouer
+          #finPartie.game-panel
+            p.panel-kicker Fin de manche
             h2 Partie terminée
             p#resultat
-            p#monScore
-            p#autreScore
-            button#terminer.button Terminer
+            .final-scores
+              p#monScore
+              p#autreScore
+            p#replay-waiting
+            .panel-actions
+              button#replay-game.button.cacher(type='button') Rejouer
+              button#terminer.button.is-outlined(type='button') Terminer
+          p#renderer-notice.recovery-notice(hidden role='status')
+        footer.arena-controls
+          .touch-controls(aria-label='Commandes du joueur')
+            button#move-left.button(type='button' aria-label='Se déplacer à gauche') ←
+            span Flèches ou appui maintenu
+            button#move-right.button(type='button' aria-label='Se déplacer à droite') →
+          button#rules-toggle.button.is-outlined(type='button' aria-haspopup='dialog') Règles et bonus
+        .arena-status
+          p#game-status(role='status')
+          button#retry-score.button.is-outlined.cacher(type='button') Réessayer l’enregistrement
+        dialog#game-rules-panel.game-rules-panel(aria-labelledby='rules-title')
+          .rules-heading
+            h2#rules-title Règles et bonus
+            button#close-rules.button.is-outlined(type='button' aria-label='Fermer les règles') Fermer
+          p.rule-intro Deux joueurs, 90 secondes. Le meilleur score gagne.
+          .rules-columns
+            section
+              h3 À ramasser
+              .points-guide
+                p
+                  span.star-symbol ★
+                  strong Étoile +1
+                p
+                  span.star-symbol.is-gold ★
+                  strong Dorée +3
+              h3 Bonus automatiques · 8 s
+              ul.item-legend
+                li
+                  span.legend-dot.sprint »
+                  span Vitesse · +50 %
+                li
+                  span.legend-dot.multiplier ×2
+                  span Double vos gains
+                li
+                  span.legend-dot.shield ◈
+                  span Bloque un impact
+                li
+                  span.legend-dot.magnet U
+                  span Attire les étoiles
+            section
+              h3 À éviter
+              ul.item-legend
+                li
+                  span.legend-dot.meteor −3
+                  span Météorite · −3 points
+                li
+                  span.legend-dot.barrier −2
+                  span Bloc au sol · −2 points
+                li
+                  span.legend-dot.slime ½
+                  span Flaque · ralenti 4 s
+              p Le score ne descend jamais sous zéro. Les objets sont partagés et un nouveau bonus remplace le précédent.
+          p.rules-note Une coupure réserve votre place 12 secondes. Quitter met fin à la manche.
+  script(src='/js/site.js')
   script(src='/js/jeuClient.js')
-  include includes/footer.pug

@@ -10,6 +10,7 @@ import {
   activeBonus,
   BONUS_NAMES,
   itemY,
+  PILOT_CONTACT_TOP,
   runnerTravel,
   stageAt,
   STAGES,
@@ -177,8 +178,10 @@ export class Arena {
     from: number,
     now: number,
   ) {
-    // (490 - 330) / 53 ≈ 3 units: contact begins at the pilot's head.
-    const enter = Math.max(from, item.bornAt + (330 / item.speed) * 1000);
+    const enter = Math.max(
+      from,
+      item.bornAt + (PILOT_CONTACT_TOP / item.speed) * 1000,
+    );
     const exit = Math.min(
       now,
       item.kind === "barrier"
@@ -201,7 +204,7 @@ export class Arena {
       activeBonus(player, now)?.kind === "magnet";
     return (
       distance <= (magnetic ? 95 : 43) &&
-      itemY(item, now) >= 330 &&
+      itemY(item, now) >= PILOT_CONTACT_TOP &&
       itemY(item, now) <= 505
     );
   }

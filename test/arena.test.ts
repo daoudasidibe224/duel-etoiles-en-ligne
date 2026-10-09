@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { Arena } from "../src/services/arena";
 import { playerSchema, roundSchema, type Star } from "../shared/contracts";
-import { itemY, runnerSpeed } from "../shared/progression";
+import { itemY, runnerSpeed, PILOT_CONTACT_TOP } from "../shared/progression";
 function fixture() {
   let now = 10000;
   const players = [
@@ -234,9 +234,20 @@ test("la collision balayée respecte le moment où l’objet arrive à hauteur d
   f.players[0].score = 6;
   f.players[0].bonus = { kind: "sprint", stage: 0, expiresAt: f.now() + 8000 };
   const meteor = f.item("meteor", 122.5);
-  meteor.bornAt = f.now() - (310 / meteor.speed) * 1000;
+  meteor.bornAt = f.now() - ((PILOT_CONTACT_TOP - 20) / meteor.speed) * 1000;
   f.arena.move("a", { runningLeft: false, runningRight: true });
   f.tick(250);
   assert.equal(f.players[0].score, 6);
   assert.ok(f.round.stars.includes(meteor));
+});
+
+test("le contact commence à la tête de l’avatar réduit, à 402 unités de chute", () => {
+  const f = fixture();
+  const star = f.item("star");
+  star.bornAt = f.now() - ((PILOT_CONTACT_TOP - 1) / star.speed) * 1000;
+  assert.throws(() => f.arena.collect("a", star.id), /portée/);
+  assert.equal(f.players[0].score, 0);
+  f.tick(8);
+  assert.equal(f.players[0].score, 1);
+  assert.equal(f.arena.collect("a", star.id), 0);
 });

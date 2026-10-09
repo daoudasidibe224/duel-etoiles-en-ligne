@@ -32,6 +32,10 @@ const status = element("game-status"),
   start = element("btnDepart"),
   menu = element("menuDepart"),
   end = element("finPartie");
+const replay = element("replay-game"),
+  rulesToggle = element("rules-toggle"),
+  closeRules = element("close-rules"),
+  rules = element("game-rules-panel") as HTMLDialogElement;
 let audio: AudioContext | undefined;
 let soundEnabled = false;
 let soundTimer: ReturnType<typeof setInterval> | undefined;
@@ -109,12 +113,33 @@ let self: Runner | undefined,
   timer: ReturnType<typeof setInterval> | undefined,
   users = 0,
   playerId = "",
+  ownerId = "",
   currentRound: Round | undefined,
   finalPlayers: Player[] | undefined,
   sequence = 0,
   animation: number | undefined,
   replaced = false;
 function updateHud() {
+  const canReplay = Boolean(
+    currentRound?.ended &&
+    currentRound.saved &&
+    users === 2 &&
+    ownerId === playerId &&
+    client.connected &&
+    !replaced,
+  );
+  replay.hidden = !canReplay;
+  replay.classList.toggle("cacher", !canReplay);
+  const replayWaiting = document.getElementById("replay-waiting");
+  if (replayWaiting) {
+    replayWaiting.hidden = !currentRound?.ended || canReplay;
+    replayWaiting.textContent =
+      ownerId !== playerId
+        ? "Le propriétaire peut relancer une manche."
+        : users < 2
+          ? "En attente du second joueur pour rejouer."
+          : "En attente de la confirmation du résultat.";
+  }
   const phase = currentRound ? stageAt(currentRound) : 0;
   const active = self && activeBonus(self);
   element("stage-name").textContent =
@@ -338,6 +363,7 @@ client.on("roomData", (payload) => {
       currentRound = parsed.data.round;
   }
   users = players.length;
+  ownerId = parsed.data.ownerId ?? players[0]?.userId ?? "";
   const count = document.querySelector(".nbJoueur"),
     host =
       players.find((player) => player.userId === parsed.data.ownerId) ??
@@ -421,12 +447,19 @@ client.on("init", (payload) => {
   stop();
   currentRound = parsed.data;
   finalPlayers = undefined;
+  sequence = 0;
+  canvas.dataset.movementSequence = "-1";
   remaining = Math.max(0, Math.ceil((currentRound.endsAt - Date.now()) / 1000));
   stars = parsed.data.stars;
   running = true;
   lastFrame = 0;
   self.x = self.targetX;
   self.motion.reset(self.x);
+  for (const runner of [self, ...others.values()]) {
+    runner.state.runningLeft = false;
+    runner.state.runningRight = false;
+  }
+  if (rules.open) rules.close();
   menu.style.display = "none";
   end.style.display = "none";
   updateHud();
@@ -522,11 +555,23 @@ for (const type of ["keydown", "keyup"])
   document.addEventListener(type, (event) => {
     if (
       !(event instanceof KeyboardEvent) ||
-      !["ArrowLeft", "ArrowRight"].includes(event.key)
+      !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)
     )
       return;
+    const horizontal = ["ArrowLeft", "ArrowRight"].includes(event.key);
+    // A release still stops a held direction after focus moves into a panel.
+    if (horizontal && type === "keyup")
+      move(event.key === "ArrowLeft" ? "left" : "right", false);
+    if (!running) return;
+    if (event.target instanceof Element) {
+      if (event.target.closest(
+        "input,textarea,select,[contenteditable]:not([contenteditable=false]),dialog,[role=dialog]",
+      )) return;
+      if (event.target.closest("button,a,summary") && !event.target.closest(".arena-shell")) return;
+    }
     event.preventDefault();
-    move(event.key === "ArrowLeft" ? "left" : "right", type === "keydown");
+    if (horizontal && type === "keydown")
+      move(event.key === "ArrowLeft" ? "left" : "right", true);
   });
 for (const [id, direction] of [
   ["move-left", "left"],
@@ -564,6 +609,20 @@ window.addEventListener("resize", () => {
   if (!running && currentRound && renderer) renderArena();
 });
 start.addEventListener("click", () => client.emit("startGame"));
+replay.addEventListener("click", () => client.emit("startGame"));
+rulesToggle.addEventListener("click", () => {
+  move("left", false);
+  move("right", false);
+  if (!rules.open) rules.showModal();
+});
+closeRules.addEventListener("click", () => rules.close());
+rules.addEventListener("close", () => {
+  if (
+    document.activeElement === document.body ||
+    rules.contains(document.activeElement)
+  )
+    rulesToggle.focus();
+});
 function leaveGame() {
   client.timeout(3000).emit("leave", () => {
     location.href = "/salon";

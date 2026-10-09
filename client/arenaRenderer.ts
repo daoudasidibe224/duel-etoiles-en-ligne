@@ -155,7 +155,7 @@ function symbol(c: Brush, kind: Star["kind"], color: string, size = 20) {
       4,
     );
   } else {
-    c.font = `700 ${size}px "Chakra Petch", sans-serif`;
+    c.font = `700 ${size}px "Chakra", sans-serif`;
     c.textAlign = "center";
     c.textBaseline = "middle";
     c.fillText(
@@ -404,7 +404,7 @@ function pilot(
     walk = p.moving && !reduced,
     step = walk ? Math.sin(stride) : 0,
     bounce = walk ? Math.abs(step) * 3 : 0;
-  const headTop = PILOT_TOP - PILOT_FLOOR;
+  const headTop = (PILOT_TOP - PILOT_FLOOR) / 0.55;
   c.save();
   c.translate(0, -bounce);
   // Two different helmet profiles and shoulder silhouettes, with a hand drawn outline.
@@ -564,27 +564,40 @@ export class ArenaRenderer {
   render(players: VisualRunner[], items: Star[], now = Date.now()) {
     const c = this.context;
     if (!c || this.disposed) return;
-    const width = Math.max(
-        1,
-        Math.round(this.canvas.getBoundingClientRect().width),
-      ),
+    const bounds = this.canvas.getBoundingClientRect();
+    const width = Math.max(1, Math.round(bounds.width)),
+      height = Math.max(1, Math.round(bounds.height)),
+      worldWidth = (ARENA_HEIGHT * width) / height,
       dpr = Math.min(window.devicePixelRatio || 1, 2);
-    if (this.width !== width || this.canvas.width !== Math.round(width * dpr)) {
+    if (
+      this.width !== width ||
+      this.canvas.width !== Math.round(width * dpr) ||
+      this.canvas.height !== Math.round(height * dpr)
+    ) {
       this.width = width;
       this.canvas.width = Math.round(width * dpr);
-      this.canvas.height = Math.round(
-        ((width * ARENA_HEIGHT) / ARENA_WIDTH) * dpr,
-      );
+      this.canvas.height = Math.round(height * dpr);
     }
     c.setTransform(
-      this.canvas.width / ARENA_WIDTH,
+      this.canvas.width / worldWidth,
       0,
       0,
       this.canvas.height / ARENA_HEIGHT,
       0,
       0,
     );
-    c.drawImage(this.backdrop, 0, 0);
+    c.drawImage(
+      this.backdrop,
+      (ARENA_WIDTH - worldWidth) / 2,
+      0,
+      worldWidth,
+      ARENA_HEIGHT,
+      0,
+      0,
+      worldWidth,
+      ARENA_HEIGHT,
+    );
+    const viewX = (x: number) => arenaX(x, worldWidth);
     const clock = performance.now();
     if (this.lastFrame && clock - this.lastFrame < 1000) {
       this.intervals.push(clock - this.lastFrame);
@@ -599,7 +612,7 @@ export class ArenaRenderer {
         ["meteor", "barrier", "slime"].includes(item.kind) &&
         itemY(item, now) > 270
       ) {
-        const x = arenaX(item.x);
+        const x = viewX(item.x);
         ellipse(c, x, 493, 29, 6, ITEM_COLORS[item.kind] + "35");
         line(
           c,
@@ -623,43 +636,49 @@ export class ArenaRenderer {
       }
       state.stride += Math.abs(p.x - state.x) * 0.045;
       state.x = p.x;
-      const x = arenaX(p.x + 22.5),
+      const x = viewX(p.x + 22.5),
         close = players.some(
           (other) => other.id !== p.id && Math.abs(other.x - p.x) < 36,
         ),
         offset = close ? (p.local ? 17 : -17) : 0;
       c.save();
-      c.translate(Math.max(39, Math.min(921, x + offset)), PILOT_FLOOR);
-      ellipse(c, 0, 3, 35, 7, "#071d2b66");
+      c.translate(
+        Math.max(25, Math.min(worldWidth - 25, x + offset)),
+        PILOT_FLOOR,
+      );
+      ellipse(c, 0, 3, 22, 5, "#071d2b66");
       c.beginPath();
       c.ellipse(
         0,
         2,
-        p.bonus?.kind === "magnet" && activeBonus(p, now) ? 68 : 36,
-        8,
+        p.bonus?.kind === "magnet" && activeBonus(p, now) ? 43 : 23,
+        5,
         0,
         0,
         Math.PI * 2,
       );
       c.strokeStyle = p.color;
-      c.lineWidth = p.local ? 3 : 1.5;
+      c.lineWidth = p.local ? 2 : 1;
       c.stroke();
+      c.save();
+      c.scale(0.55, 0.55);
       pilot(c, p, state.stride, now, this.reduced);
+      c.restore();
       if (p.local) {
-        const size = Math.max(20, (12 * 960) / width);
-        c.font = `700 ${size}px "Chakra Petch",sans-serif`;
+        const size = Math.max(14, (9.5 * worldWidth) / width);
+        c.font = `700 ${size}px "Chakra",sans-serif`;
         c.textAlign = "center";
         c.textBaseline = "middle";
         const w = c.measureText("VOUS").width + 16,
-          y = -185;
-        pill(c, -w / 2, y - size / 2 - 4, w, size + 8, 7, "#142d3fee", p.color);
+          y = -109;
+        pill(c, -w / 2, y - size / 2 - 2, w, size + 4, 5, "#142d3fc0");
         c.fillStyle = "#f3f2da";
         c.fillText("VOUS", 0, y);
       }
       if (p.feedback && now - p.feedback.at < 800 && p.local) {
         const text = p.feedback.text.match(/[+−-]\d+/)?.[0] ?? "";
         if (text) {
-          c.font = '700 28px "Chakra Petch",sans-serif';
+          c.font = '700 28px "Chakra",sans-serif';
           c.textAlign = "center";
           c.lineWidth = 5;
           c.strokeStyle = "#112839";
@@ -674,7 +693,13 @@ export class ArenaRenderer {
     for (const item of items) {
       const sprite = this.sprites.get(item.kind);
       if (sprite)
-        c.drawImage(sprite, arenaX(item.x) - 50, itemY(item, now) - 45);
+        c.drawImage(
+          sprite,
+          viewX(item.x) - 35,
+          itemY(item, now) - 31.5,
+          70,
+          84,
+        );
     }
     if (this.intervals.length) {
       const sorted = [...this.intervals].sort((a, b) => a - b);
@@ -686,6 +711,8 @@ export class ArenaRenderer {
         ].toFixed(2);
       this.canvas.dataset.frameSamples = String(sorted.length);
     }
+    this.canvas.dataset.worldWidth = worldWidth.toFixed(1);
+    this.canvas.dataset.pilotHeight = String(PILOT_FLOOR - PILOT_TOP);
     this.canvas.dataset.pixelRatio = String(dpr);
     this.canvas.dataset.cachedSprites = String(this.sprites.size);
     this.canvas.dataset.visibleObjects = String(players.length + items.length);

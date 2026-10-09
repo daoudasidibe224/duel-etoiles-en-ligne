@@ -367,7 +367,9 @@ export default function game(
           room = member && rooms[member.player.room];
         if (
           !room ||
-          room.started ||
+          (room.round
+            ? !room.round.ended || !room.round.saved
+            : room.started) ||
           room.utilisateurs.length !== 2 ||
           room.proprietaireId !== user.id
         )
@@ -386,8 +388,19 @@ export default function game(
         delete room.interruptedRoundId;
         room.started = true;
         room.startedAt = Date.now();
+        if (room.round) participants.delete(room.round.id);
         room.utilisateurs.forEach((player, index) => {
+          player.score = 0;
           player.x = index === 0 ? 430 : 530;
+          player.usedStages = [];
+          player.movementSequence = -1;
+          player.movementStartedAt = room.startedAt;
+          player.sampledAt = room.startedAt;
+          const membership = members.get(player.userId);
+          if (membership) {
+            membership.movementSequence = -1;
+            membership.scoreSequence = -1;
+          }
           delete player.bonus;
           delete player.slowedUntil;
           delete player.feedback;
@@ -536,6 +549,8 @@ export default function game(
             );
             round.saved = true;
             delete round.saveError;
+            await sync();
+            namespace.to(room.id).emit("roundEnded", resultSnapshot(room));
           } catch {
             return (
               typeof callback === "function" &&

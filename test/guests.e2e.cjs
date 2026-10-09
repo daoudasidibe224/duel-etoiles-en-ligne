@@ -160,10 +160,22 @@ const { createApp } = require("../dist/src/app"),
     await a.getByRole("button", { name: "Jouer", exact: true }).click();
     await a.getByText("La partie a commencé.", { exact: true }).waitFor();
     const live = instance.app.salons[room];
-    live.round.stars.push({ id: require("node:crypto").randomUUID(), kind: "multiplier", x: live.utilisateurs[0].x + 22.5, bornAt: Date.now() - 450 / 140 * 1000, speed: 140 });
+    live.round.stars.push({
+      id: require("node:crypto").randomUUID(),
+      kind: "multiplier",
+      x: live.utilisateurs[0].x + 22.5,
+      bornAt: Date.now() - (450 / 140) * 1000,
+      speed: 140,
+    });
     await a.getByText("Points ×2 activé", { exact: true }).waitFor();
-    await a.waitForFunction(() => document.querySelector("#gameCanvas")?.dataset.renderer === "canvas-2d");
-    await b.waitForFunction(() => document.querySelector("#gameCanvas")?.dataset.renderer === "canvas-2d");
+    await a.waitForFunction(
+      () =>
+        document.querySelector("#gameCanvas")?.dataset.renderer === "canvas-2d",
+    );
+    await b.waitForFunction(
+      () =>
+        document.querySelector("#gameCanvas")?.dataset.renderer === "canvas-2d",
+    );
     assert.equal(await b.locator("#renderer-notice").isVisible(), false);
     await a.waitForFunction(
       () => Number(document.querySelector("#self-score")?.textContent) >= 2,
@@ -206,17 +218,60 @@ const { createApp } = require("../dist/src/app"),
       .getByText("Partie terminée. Votre score invité reste visible ici.", {
         exact: true,
       })
-      .waitFor({ timeout: 15000 }).catch(async error => {
-        console.error('Guest finish diagnostics', JSON.stringify({
-          page: await a.locator('main').innerText(),
-          state: instance.app.salons[room] && {round: instance.app.salons[room].round, players: instance.app.salons[room].utilisateurs.map(p=>({id:p.id,kind:p.kind,score:p.score}))}, errors
-        }));
+      .waitFor({ timeout: 15000 })
+      .catch(async (error) => {
+        console.error(
+          "Guest finish diagnostics",
+          JSON.stringify({
+            page: await a.locator("main").innerText(),
+            state: instance.app.salons[room] && {
+              round: instance.app.salons[room].round,
+              players: instance.app.salons[room].utilisateurs.map((p) => ({
+                id: p.id,
+                kind: p.kind,
+                score: p.score,
+              })),
+            },
+            errors,
+          }),
+        );
         throw error;
       });
     assert.equal(await Score.countDocuments({ matchId: originalRound }), 0);
     assert.ok(Number(await a.locator("#self-score").textContent()) >= 2);
     await noOverflow(a);
     await noOverflow(b);
+    await a.locator("#replay-game").waitFor({ state: "visible" });
+    assert.equal(await b.locator("#replay-game").isVisible(), false);
+    await b
+      .getByText("Le propriétaire peut relancer une manche.", { exact: true })
+      .waitFor();
+    await a.locator("#replay-game").click();
+    await a.getByText("La partie a commencé.", { exact: true }).waitFor();
+    await b.getByText("La partie a commencé.", { exact: true }).waitFor();
+    assert.notEqual(instance.app.salons[room].round.id, originalRound);
+    assert.equal(instance.app.salons[room].utilisateurs.length, 2);
+    assert.deepEqual(
+      instance.app.salons[room].utilisateurs.map((player) => player.score),
+      [0, 0],
+    );
+    assert.equal(Number(await a.locator("#self-score").textContent()), 0);
+    assert.equal(Number(await b.locator("#self-score").textContent()), 0);
+    assert.equal(await a.locator("#finPartie").isVisible(), false);
+    await a.keyboard.down("ArrowLeft");
+    await a.waitForFunction(
+      () =>
+        Number(
+          document.querySelector("#gameCanvas").dataset.movementSequence,
+        ) === 0,
+    );
+    await a.keyboard.up("ArrowLeft");
+    await a.waitForFunction(
+      () =>
+        Number(
+          document.querySelector("#gameCanvas").dataset.movementSequence,
+        ) === 1,
+    );
     // La création d'un compte remplace la session invitée, sans reprendre ses points.
     await a.goto(base + "/inscription");
     await a.locator("#email").fill("guest_to_account@example.test");

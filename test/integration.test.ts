@@ -348,7 +348,6 @@ test("une place par compte : doublons, reprise, changement de salon, départs et
       await second.emitWithAck("scoreFinDeJeu", { roundId: round.id }),
       undefined,
     );
-    second.emit("startGame");
     second.emit("score", { roundId: round.id, sequence: 100 + i, score: 2 });
   }
   const results = await Score.find({ matchId: round.id });

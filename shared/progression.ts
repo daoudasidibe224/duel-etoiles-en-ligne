@@ -1,4 +1,5 @@
 import type { Player, Round, Star } from "./contracts";
+export const PILOT_CONTACT_TOP = 402;
 export const STAGES = [
   { name: "Échauffement", speed: 140, interval: 1100 },
   { name: "Pluie cosmique", speed: 175, interval: 850 },

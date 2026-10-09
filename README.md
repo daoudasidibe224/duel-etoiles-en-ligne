@@ -76,7 +76,7 @@ Les pages relisent l’accès courant à l’activation de l’onglet, à l’ex
 
 ## Interface et fontes
 
-L’interface réunit un lobby avec aperçu de l’arène, création de salon et liste des parties. Dans la manche, les scores encadrent la minuterie ; l’effet actif reste au-dessus du terrain ; les bonus et les dangers sont expliqués sous les commandes. La navigation sépare les commandes de jeu et l’accès du joueur. Press Start 2P et Chakra Petch sont servis localement. Les fichiers et leurs licences SIL Open Font License proviennent du [répertoire officiel Google Fonts](https://github.com/google/fonts) et figurent dans `public/assets/fonts/`.
+Le lobby présente l’arène, la création de salon et les parties disponibles. La page de jeu contient un seul cadre : les deux scores, le chrono, les effets, le terrain et les commandes. Le départ et les résultats apparaissent dans un panneau intégré ; les règles s’ouvrent à la demande. Le propriétaire peut rejouer une manche dans le même salon après la sauvegarde du résultat, si les deux joueurs sont connectés. La navigation sépare les commandes de jeu et l’accès du joueur. Press Start 2P et Chakra Petch sont servis localement. Les fichiers et leurs licences SIL Open Font License proviennent du [répertoire officiel Google Fonts](https://github.com/google/fonts) et figurent dans `public/assets/fonts/`.
 
 ## Configuration et limites
 
