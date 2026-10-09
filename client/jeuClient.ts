@@ -177,6 +177,8 @@ function stop() {
 }
 function finish() {
   if (!self) return;
+  menu.style.display = "none";
+  start.classList.add("cacher");
   stop();
   end.style.display = "block";
   const opponent = others.values().next().value;
@@ -303,14 +305,17 @@ client.on("roomClosed", (reason) => {
 });
 bindSessionResume(client);
 client.on("accessEnded", accessEnded);
-client.on("connect", () =>
+const joinRoom = () =>
   client.emit("join", { room }, (error) => {
     if (error) {
       status.textContent = error;
       start.classList.add("cacher");
     }
-  }),
-);
+  });
+client.on("connect", joinRoom);
+client.on("engineReady", () => {
+  if (!replaced) joinRoom();
+});
 client.on("connect_error", () => {
   status.textContent = "Connexion impossible. Rechargez la page.";
 });
@@ -324,6 +329,30 @@ client.on("roomData", (payload) => {
   const parsed = gameRoomSchema.safeParse(payload);
   if (!parsed.success) return;
   const players = parsed.data.utilisateurs;
+  element("room-recovery").textContent = parsed.data.recoveryNotice ?? "";
+  element("room-recovery").hidden = !parsed.data.recoveryNotice;
+  if (!parsed.data.round && parsed.data.recoveryNotice) {
+    stop();
+    currentRound = undefined;
+    stars = [];
+    remaining = 90;
+    bonusRequests.clear();
+    menu.style.display = "block";
+    end.style.display = "none";
+    status.textContent =
+      "Salon restauré. En attente du départ de la nouvelle manche.";
+    for (const runner of [self, ...others.values()])
+      if (runner) {
+        runner.x = runner.id === parsed.data.ownerId ? 430 : 530;
+        runner.state = {
+          runningLeft: false,
+          runningRight: false,
+          idLeft: false,
+          idRight: true,
+          dead: false,
+        };
+      }
+  }
   if (parsed.data.round) {
     stars = parsed.data.round.stars;
     if (currentRound?.id === parsed.data.round.id)

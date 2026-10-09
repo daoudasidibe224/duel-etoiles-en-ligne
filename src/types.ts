@@ -44,8 +44,9 @@ declare module "express-serve-static-core" {
     io: GameServer;
     salons: Rooms;
     identities: IdentityAuthority;
-    releasePlayer: (id: string, sessionId?: string) => void;
+    releasePlayer: (id: string, sessionId?: string) => Promise<void>;
     roomSessions: Map<string, string>;
+    roomJournal?: import("./services/roomJournal").RoomJournal;
   }
 }
 declare module "http" {
@@ -76,14 +77,14 @@ export function sessionId(req: Request): string {
   if (!req.sessionID) throw new Error("Session absente");
   return req.sessionID;
 }
-export function revokeAccess(req: Request) {
+export async function revokeAccess(req: Request) {
   req.app.identities.revoke(sessionId(req));
   const ids = new Set(
     [req.user?.id, req.session.guest?.id].filter((id): id is string =>
       Boolean(id),
     ),
   );
-  for (const id of ids) req.app.releasePlayer(id, req.sessionID);
+  for (const id of ids) await req.app.releasePlayer(id, req.sessionID);
   for (const name of ["/", "/jeu", "/discussion"]) {
     for (const socket of req.app.io.of(name).sockets.values()) {
       if (socket.request.sessionID === req.sessionID) {

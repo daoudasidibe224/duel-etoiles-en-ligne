@@ -1,6 +1,10 @@
 import "dotenv/config";
+import type { Socket } from "node:net";
 import mongoose from "mongoose";
 import MongoStore from "connect-mongo";
+import { RoomJournal } from "./src/services/roomJournal";
+import Score from "./src/models/Score";
+import { recoverResults } from "./src/services/results";
 import { createApp } from "./src/app";
 
 export async function start() {
@@ -18,23 +22,64 @@ export async function start() {
     client: mongoose.connection.getClient(),
     collectionName: "sessions",
   });
-  const { server, io } = createApp({ secret: process.env.SECRET, store });
+  const roomJournal = RoomJournal.prepare();
+  const { server, io } = createApp({
+    secret: process.env.SECRET,
+    store,
+    roomJournal,
+  });
+  const retry = setInterval(() => {
+    if (roomJournal.available) void recoverResults().catch(() => {});
+  }, 5000);
+  retry.unref();
+  void (async () => {
+    await Score.init();
+    await roomJournal.activate();
+    await recoverResults().catch(() => {});
+  })().catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+    void close().catch((failure) => console.error(failure.message));
+  });
   server.listen(port, "0.0.0.0", () =>
     console.log(`Jeu disponible sur http://localhost:${port}`),
   );
+  const connections = new Set<Socket>();
+  server.on("connection", (socket) => {
+    connections.add(socket);
+    socket.once("close", () => connections.delete(socket));
+  });
   let closing = false;
   async function close() {
     if (closing) return;
     closing = true;
-    io.close();
-    await store.close();
-    await mongoose.disconnect();
+    clearInterval(retry);
+    try {
+      await roomJournal.close();
+    } finally {
+      const deadline = setTimeout(() => {
+        for (const socket of connections) socket.destroy();
+      }, 5000);
+      deadline.unref();
+      await new Promise<void>((resolve) => io.close(() => resolve()));
+      clearTimeout(deadline);
+      try {
+        await store.close();
+      } finally {
+        await mongoose.disconnect();
+      }
+    }
   }
+  roomJournal.onUnavailable = () => {
+    process.exitCode = 1;
+    void close().catch((error) => console.error(error.message));
+  };
   process.on("SIGTERM", close);
   process.on("SIGINT", close);
 }
 if (require.main === module)
-  start().catch((error) => {
+  start().catch(async (error) => {
     console.error(error.message);
+    await mongoose.disconnect();
     process.exitCode = 1;
   });

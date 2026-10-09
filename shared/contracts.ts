@@ -48,6 +48,8 @@ export const roomSchema = z.object({
   proprietaireId: z.string(),
   utilisateurs: z.array(playerSchema).max(2),
   createdAt: z.number(),
+  recoveryNotice: z.string().optional(),
+  interruptedRoundId: z.string().uuid().optional(),
   started: z.boolean().optional(),
   startedAt: z.number().optional(),
   round: roundSchema.optional(),
@@ -87,6 +89,8 @@ export const gameRoomSchema = z.object({
   room: z.string(),
   utilisateurs: z.array(playerSchema).max(2),
   ownerId: z.string().optional(),
+  recoveryNotice: z.string().optional(),
+  interruptedRoundId: z.string().uuid().optional(),
   round: roundSchema.optional(),
 });
 export const chatRoomSchema = z.object({
@@ -117,6 +121,7 @@ export interface ClientEvents {
   envoyerMessage: (payload: unknown, callback: Ack) => void;
 }
 export interface ServerEvents {
+  engineReady: () => void;
   majSalonDeJeu: (rooms: Rooms) => void;
   roomData: (
     payload: z.infer<typeof gameRoomSchema> | z.infer<typeof chatRoomSchema>,

@@ -60,7 +60,7 @@ router.post("/inscription", authLimit, async (req, res, next) => {
       mdp: await bcrypt.hash(mdp, 12),
     });
     const target = req.session.returnTo || "/salon";
-    revokeAccess(req);
+    await revokeAccess(req);
     req.login(utilisateur, (error) =>
       error ? next(error) : res.redirect(target),
     );
@@ -111,14 +111,12 @@ router.post("/invite", authLimit, async (req, res, next) => {
       ? req.body.nomUtilisateur.trim().toLowerCase()
       : "";
   if (!validName(pseudo))
-    return res
-      .status(422)
-      .render("jouer", {
-        nomUtilisateur: pseudo,
-        erreurs: {
-          pseudo: "Choisissez 3 à 24 lettres, chiffres, tirets ou tirets bas.",
-        },
-      });
+    return res.status(422).render("jouer", {
+      nomUtilisateur: pseudo,
+      erreurs: {
+        pseudo: "Choisissez 3 à 24 lettres, chiffres, tirets ou tirets bas.",
+      },
+    });
   try {
     if (req.session.guest && req.session.guest.expiresAt <= Date.now())
       req.app.releasePlayer(req.session.guest.id, req.sessionID);
@@ -131,24 +129,20 @@ router.post("/invite", authLimit, async (req, res, next) => {
     delete req.session.returnTo;
     req.session.save((error) => (error ? next(error) : res.redirect(target)));
   } catch (error) {
-    return res
-      .status(409)
-      .render("jouer", {
-        nomUtilisateur: pseudo,
-        erreurs: {
-          session:
-            error instanceof Error ? error.message : "Session indisponible.",
-        },
-      });
+    return res.status(409).render("jouer", {
+      nomUtilisateur: pseudo,
+      erreurs: {
+        session:
+          error instanceof Error ? error.message : "Session indisponible.",
+      },
+    });
   }
 });
 router.post("/connexion", authLimit, (req, res, next) => {
   if (typeof req.body?.email !== "string" || typeof req.body?.mdp !== "string")
-    return res
-      .status(422)
-      .render("connexion", {
-        erreurs: { form: "Saisissez un email et un mot de passe." },
-      });
+    return res.status(422).render("connexion", {
+      erreurs: { form: "Saisissez un email et un mot de passe." },
+    });
   passport.authenticate(
     "local",
     (error: unknown, user: Express.User | false | null, info: unknown) => {
@@ -165,13 +159,16 @@ router.post("/connexion", authLimit, (req, res, next) => {
         return res.redirect("/connexion");
       }
       const target = req.session.returnTo || "/salon";
-      revokeAccess(req);
-      req.login(user, (err) => (err ? next(err) : res.redirect(target)));
+      void revokeAccess(req)
+        .then(() =>
+          req.login(user, (err) => (err ? next(err) : res.redirect(target))),
+        )
+        .catch(next);
     },
   )(req, res, next);
 });
-router.post("/deconnexion", (req, res, next) => {
-  revokeAccess(req);
+router.post("/deconnexion", async (req, res, next) => {
+  await revokeAccess(req);
   req.logout((error) => {
     if (error) return next(error);
     req.session.destroy((err) => {

@@ -12,14 +12,34 @@ const list = document.querySelector(".partieDisponible"),
   ),
   status = element("connection-status");
 if (!list) throw new Error("Liste des salons introuvable");
+let ownId = "";
+client.on("identity", (id) => {
+  ownId = id;
+});
 bindSessionResume(client);
 client.on("accessEnded", accessEnded);
-client.on("connect", () => {
-  status.textContent = "En ligne";
-  status.dataset.state = "online";
-  if (createButton) createButton.disabled = false;
-  client.emit("join", {}, () => {});
-});
+function joinLobby() {
+  status.textContent = "Reprise des salons…";
+  status.dataset.state = "loading";
+  if (createButton) createButton.disabled = true;
+  client.emit("join", {}, (error) => {
+    if (error) {
+      status.textContent = error;
+      status.dataset.state = "loading";
+      if (createButton) createButton.disabled = true;
+      const waiting = document.createElement("p");
+      waiting.className = "notification";
+      waiting.textContent = error;
+      list?.replaceChildren(waiting);
+    } else {
+      status.textContent = "En ligne";
+      status.dataset.state = "online";
+      if (createButton) createButton.disabled = false;
+    }
+  });
+}
+client.on("connect", joinLobby);
+client.on("engineReady", joinLobby);
 client.on("disconnect", () => {
   status.textContent = "Hors ligne · reconnexion…";
   status.dataset.state = "offline";
@@ -38,7 +58,10 @@ client.on("majSalonDeJeu", (payload) => {
   }
   list.replaceChildren();
   const rooms = Object.values(parsed.data).filter(
-    (room) => room.utilisateurs.length < 2 && !room.started,
+    (room) =>
+      (room.utilisateurs.length < 2 && !room.started) ||
+      room.proprietaireId === ownId ||
+      room.utilisateurs.some((player) => player.userId === ownId),
   );
   if (!rooms.length) {
     const empty = document.createElement("div");
@@ -61,7 +84,16 @@ client.on("majSalonDeJeu", (payload) => {
     const link = document.createElement("a");
     link.className = "button is-outlined";
     link.href = `/salon/salonDeJeu/${encodeURIComponent(room.id)}`;
-    link.textContent = "Rejoindre →";
+    link.textContent =
+      room.proprietaireId === ownId ||
+      room.utilisateurs.some((player) => player.userId === ownId)
+        ? "Reprendre →"
+        : "Rejoindre →";
+    if (room.recoveryNotice) {
+      const notice = document.createElement("p");
+      notice.textContent = room.recoveryNotice;
+      row.append(notice);
+    }
     row.append(title, count, link);
     list.append(row);
   }

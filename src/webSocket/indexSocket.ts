@@ -8,13 +8,22 @@ export default function registerSockets({
   salons,
   gameOptions,
   roomSessions,
+  roomJournal,
 }: {
   io: GameServer;
   salons: Rooms;
   gameOptions?: { durationMs?: number; reconnectMs?: number };
   roomSessions: Map<string, string>;
+  roomJournal?: import("../services/roomJournal").RoomJournal;
 }) {
   discussion(io.of("/discussion"));
-  lobby(io.of("/"), salons, roomSessions);
-  return game(io.of("/jeu"), io.of("/"), salons, gameOptions, roomSessions);
+  lobby(io.of("/"), salons, roomSessions, roomJournal);
+  return game(
+    io.of("/jeu"),
+    io.of("/"),
+    salons,
+    gameOptions,
+    roomSessions,
+    roomJournal,
+  );
 }

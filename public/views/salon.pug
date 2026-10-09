@@ -12,6 +12,9 @@ body
         span 90 secondes
         span 3 étapes
     include includes/messages.pug
+    if recoveredRoom
+      p.notification(role="status")= recoveredRoom.recoveryNotice
+      a.button.is-outlined(href="/salon/salonDeJeu/" + recoveredRoom.id) Reprendre votre salon
     .lobby-layout
       aside.lobby-launch(aria-labelledby='nouvelle-partie-titre')
         img.arena-preview(src='/images/arena-preview.svg' alt='Deux robots et une étoile dans l’arène.' width='640' height='300')

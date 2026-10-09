@@ -1,3 +1,4 @@
+import type { RoomJournal } from "./services/roomJournal";
 import { registerHealth } from "./health";
 import { IdentityAuthority } from "./services/identities";
 import { sessionId } from "./types";
@@ -32,12 +33,14 @@ export function createApp({
   gameOptions,
   guestDurationMs,
   sessionDurationMs,
+  roomJournal,
 }: {
   secret: string;
   store?: session.Store;
   gameOptions?: { durationMs?: number; reconnectMs?: number };
   guestDurationMs?: number;
   sessionDurationMs?: number;
+  roomJournal?: RoomJournal;
 }) {
   if (!secret || secret.length < 32)
     throw new Error(
@@ -122,14 +125,29 @@ export function createApp({
       }
   });
   app.io = io;
-  app.salons = Object.create(null);
-  app.roomSessions = new Map();
+  app.roomJournal = roomJournal;
+  roomJournal?.monitor(() => {
+    io.of("/jeu").emit(
+      "roomClosed",
+      "La sauvegarde des salons est indisponible. Rechargez la page lorsque le serveur revient.",
+    );
+    for (const name of ["/", "/jeu", "/discussion"])
+      io.of(name).disconnectSockets(true);
+  });
+  app.salons = roomJournal?.restored ?? Object.create(null);
+  app.roomSessions = roomJournal?.ownerSessions ?? new Map();
   app.releasePlayer = registerSockets({
     io,
     salons: app.salons,
     gameOptions,
     roomSessions: app.roomSessions,
+    roomJournal,
   });
+  if (roomJournal)
+    void roomJournal.ready.then(() => {
+      io.of("/").emit("engineReady");
+      io.of("/jeu").emit("engineReady");
+    });
   const authorizeSocket: Parameters<ReturnType<typeof io.of>["use"]>[0] = (
     socket,
     next,
@@ -162,12 +180,54 @@ export function createApp({
       );
       socket.disconnect(true);
     };
+    let validation = Promise.resolve();
     socket.use((_packet, done) => {
-      if (!app.identities.current(req.sessionID, identity)) {
-        endAccess();
-        return done(new Error("Session expirée"));
-      }
-      done();
+      validation = validation
+        .then(async () => {
+          if (!socket.connected) return done(new Error("Connexion fermée"));
+          if (!app.identities.current(req.sessionID, identity)) {
+            endAccess();
+            return done(new Error("Session expirée"));
+          }
+          const request = req as Request;
+          const error = await new Promise<unknown>((resolve) =>
+            request.session.reload(resolve),
+          );
+          if (error) {
+            if (
+              error instanceof Error &&
+              error.message === "failed to load session"
+            )
+              endAccess();
+            else {
+              socket.emit(
+                "roomClosed",
+                "La vérification de votre accès est indisponible. Réessayez lorsque le serveur revient.",
+              );
+              socket.disconnect(true);
+            }
+            return done(new Error("Accès indisponible"));
+          }
+          const canonical = app.identities.resolve(
+            req.sessionID,
+            req.user,
+            request.session.guest,
+            request.session.cookie.expires?.getTime(),
+          );
+          if (
+            !canonical ||
+            canonical.id !== identity.id ||
+            canonical.kind !== identity.kind
+          ) {
+            endAccess();
+            return done(new Error("Session fermée"));
+          }
+          done();
+        })
+        .catch(() => {
+          socket.disconnect(true);
+          done(new Error("Accès indisponible"));
+        });
     });
     if (identity.expiresAt) {
       const timer = setTimeout(
